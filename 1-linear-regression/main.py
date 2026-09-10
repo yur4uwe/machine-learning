@@ -477,6 +477,24 @@ class LRModel:
         lr_model.weight_vector -= lr_model.learning_rate * w_grad
         lr_model.bias -= lr_model.learning_rate * b_grad
 
+    def compute_loss(
+        lr_model,  # pyright: ignore
+        feature_matrix: np.ndarray,
+        target_vector: np.ndarray,
+    ) -> float:
+        y_pred = lr_model.predict(feature_matrix)
+        return float(np.mean((y_pred - target_vector) ** 2) / 2)
+
+    def compute_gradients(
+        lr_model,  # pyright: ignore
+        feature_matrix: np.ndarray,
+        target_vector: np.ndarray,
+    ) -> tuple[np.ndarray, float]:
+        y_pred = lr_model.predict(feature_matrix)
+        w_grad = weight_loss_gradient(feature_matrix, y_pred, target_vector)
+        b_grad = bias_loss_gradient(y_pred, target_vector)
+        return w_grad, b_grad
+
     def train(
         lr_model,  # pyright: ignore
         X_train: np.ndarray,
@@ -493,13 +511,10 @@ class LRModel:
 
         for _ in range(epochs):
             for X_batch, y_batch in sampler.get_batches(X_train, y_train):
-                y_pred_batch = lr_model.predict(X_batch)
-                w_grad = weight_loss_gradient(X_batch, y_pred_batch, y_batch)
-                b_grad = bias_loss_gradient(y_pred_batch, y_batch)
+                w_grad, b_grad = lr_model.compute_gradients(X_batch, y_batch)
                 lr_model.update_params(w_grad, b_grad)
 
-            total_pred = lr_model.predict(X_train)
-            loss_history.append(mse_loss(total_pred, y_train))
+            loss_history.append(lr_model.compute_loss(X_train, y_train))
 
         return loss_history
 
@@ -944,7 +959,7 @@ plt.show()
 # 2. Чи може R^2 бути від'ємним та за яких умов?
 #    - Так, R^2 стає від'ємним (R^2 < 0), коли сума квадратів залишків перевищує загальну дисперсію вибірки (SS_res > SS_tot).
 #    - Це трапляється, якщо прогнози моделі на нових даних гірші за просте константне середнє.
-#    - Типові причини: катастрофічне перенавчання (overfitting) або відсутність зсуву (bias) при навчанні на даних з відмінним середнім рівнем.
+#    - Типові причини: overfitting або відсутність bias'y при навчанні на даних з відмінним середнім рівнем.
 #
 # 3. Порівняння R^2 на Train та Test (Діагностика стану моделі):
 #    - Train R^2 = 0.807 проти Test R^2 = 0.859.
@@ -954,7 +969,7 @@ plt.show()
 #    - Batch GD: Test R^2 = 0.8578, RMSE = $26,993.11
 #    - SGD: Test R^2 = 0.8582, RMSE = $26,951.03
 #    - Mini-Batch GD: Test R^2 = 0.8591, RMSE = $26,869.60
-#    - Усі три оптимізатори демонструють практично однакову фінальну точність, оскільки цільова квадратична функція втрат є строго опуклою (convex) і має єдиний глобальний оптимум.
+#    - Усі три оптимізатори демонструють практично однакову фінальну точність, оскільки цільова квадратична функція втрат є строго опуклою і має єдиний глобальний оптимум.
 
 # %% [markdown]
 # ## 2.5 Етап 5. Перевірка статистичних припущень
@@ -1022,9 +1037,12 @@ plt.show()
 
 # %% [markdown]
 # Висновок щодо лінійності:
-# Припущення про лінійність загалом виконується в діапазоні середніх цін ($100,000 – $300,000), де залишки симетрично розподілені навколо нульової осі. Проте для елітної нерухомості (> $350,000) спостерігається вигин тренду вгору.
+# Припущення про лінійність порушується через наявність систематичного хвилеподібного патерну залишків (e = y - y_pred):
+# 1. Дешеві будинки в діапазоні [0, $120k]: модель їх переважно недооцінює (додатні залишки e > 0, оскільки реальна ціна y > y_pred).
+# 2. Будинки середнього сегменту в діапазоні [$130k, $210k]: модель їх переоцінює (від'ємні залишки e < 0, оскільки реальна ціна y < y_pred).
+# 3. Дорогі та елітні будинки від $240k і вище: залишки мають величезний розкид зі значним недооцінюванням найдорожчих маєтків.
 #
-# Це означає, що для дорогих маєтків реальна вартість зростає швидше за лінійну комбінацію площі та якості. Для усунення цього ефекту на практиці використовують логарифмування цільової змінної log(SalePrice) або додавання квадратичних членів.
+# Це означає, що спроба описати нелінійну залежність вартості прямою площиною призводить до хвилеподібної систематичної похибки. Для виправлення порушення лінійності необхідно застосовувати логарифмічне перетворення цільової змінної log(SalePrice).
 
 # %% [markdown]
 # ### 2.5.2 Перевірка нормальності залишків (Normality: Q-Q Plot та гістограма)
@@ -1061,12 +1079,12 @@ axes[0].set_xlabel("Residuals ($)")
 axes[0].set_ylabel("Density")
 axes[0].legend(frameon=True, facecolor="white")
 
-# 2. Quantile-Quantile (Q-Q) Plot (Pure NumPy Implementation)
+# 2. Quantile-Quantile (Q-Q) Plot
 n_samples = len(std_residuals_test)
 sorted_residuals = np.sort(std_residuals_test)
 probs = (np.arange(1, n_samples + 1) - 0.5) / n_samples
 
-# Pure NumPy: Compute theoretical standard normal quantiles using high-sample reference distribution
+# Compute theoretical standard normal quantiles using high-sample reference distribution
 rng_diag = np.random.default_rng(42)
 ref_normal = rng_diag.normal(loc=0.0, scale=1.0, size=200_000)
 theoretical_quantiles = np.percentile(ref_normal, probs * 100.0)
@@ -1097,9 +1115,12 @@ plt.show()
 
 # %% [markdown]
 # Висновок щодо нормальності залишків:
-# Припущення про нормальність залишків порушується у верхньому хвості розподілу (правий хвіст відхиляється вгору на Q-Q графіку через поодинокі дорогі будинки з високими похибками).
+# Розподіл залишків демонструє властивості лептокуртичного розподілу (Leptokurtosis / Fat Tails):
+# 1. Центральний діапазон [-2 sigma, +2 sigma]: припущення про нормальність виконується надійно (близько 95% спостережень щільно слідують теоретичній прямій y = x).
+# 2. Асиметрія плечей: діапазон [-2 sigma, -1 sigma] трохи щільніший за [+1 sigma, +2 sigma], що відповідає помірним ринковим знижкам на стандартне житло.
+# 3. Хвостові відхилення (|e| > 2 sigma): на Q-Q графіку чітко видно кубічну S-подібну форму з важкими хвостами, спричинену поодинокими елітними маєтками з великими похибками.
 #
-# Це означає, що точкові оцінки коефіцієнтів залишаються незміщеними та спроможними (згідно з теоремою Гаусса-Маркова), проте класичні довірчі інтервали та параметричні тести значущості можуть бути менш точними без нормалізуючого логарифмування ціни.
+# Це означає, що для 95% типових будинків модель має стабільний нормальний розподіл похибок, а відхилення сконцентровані виключно в екстремальних хвостах. Згідно з теоремою Гаусса-Маркова, точкові оцінки коефіцієнтів залишаються BLUE (незміщеними та ефективними).
 
 # %% [markdown]
 # ### 2.5.3 Перевірка гомоскедастичності (Homoscedasticity: Scale-Location Plot)
@@ -1122,19 +1143,26 @@ plt.scatter(
     label="$\\sqrt{|\\text{Standardized Residuals}|}$",
 )
 
-# Trend Line for variance
+# Trend Line for variance (slope k and intercept b)
 poly_var_weights = np.polyfit(y_test_pred_eval, sqrt_abs_std_residuals, deg=1)
+slope_k, intercept_b = float(poly_var_weights[0]), float(poly_var_weights[1])
 poly_var_trend = np.poly1d(poly_var_weights)(fitted_sorted)
+
+print(
+    f"Homoscedasticity Trend: Slope (k) = {slope_k:.3e}, Intercept (b) = {intercept_b:.4f}"
+)
 
 plt.plot(
     fitted_sorted,
     poly_var_trend,
     color="#e74c3c",
     linewidth=2.5,
-    label="Variance Trend Line",
+    label=f"Variance Trend ($k = {slope_k:.2e}$, $b = {intercept_b:.2f}$)",
 )
 
-plt.title("Assumption 3: Homoscedasticity Diagnostic (Scale-Location Plot)")
+plt.title(
+    f"Assumption 3: Homoscedasticity Diagnostic (Scale-Location Plot)\nTrend Slope $k = {slope_k:.2e}$ (Positive slope indicates heteroscedasticity)"
+)
 plt.xlabel("Fitted Values $\\hat{y}$ ($)")
 plt.ylabel("$\\sqrt{|\\text{Standardized Residuals}|}$")
 plt.legend(frameon=True, facecolor="white")
@@ -1147,9 +1175,11 @@ plt.show()
 
 # %% [markdown]
 # Висновок щодо гомоскедастичності:
-# Припущення про гомоскедастичність порушується (наявна гетероскедастичність): лінія тренду на Scale-Location графіку має помітний висхідний нахил, а дисперсія похибок зростає разом зі збільшенням вартості будинку.
+# Припущення про гомоскедастичність порушується (наявна гетероскедастичність):
+# 1. Кутовий коефіцієнт нахилу k = 1.56e-6 (0.00000156) > 0 при базовому зміщенні b = 0.45.
+# 2. Висхідний нахил тренду свідчить про те, що розкид похибок розширюється у формі конуса разом зі зростанням вартості житла.
 #
-# Це означає, що для доступних будинків ($100,000) похибка становить приблизно +/- $15,000, тоді як для елітних ($500,000) вона досягає +/- $60,000. Внаслідок цього звичайний МНК надає надмірну вагу дорогим об'єктам.
+# Це означає, що для доступних будинків ($100,000) середня похибка становить близько +/- $15,000, тоді як для елітних ($500,000) вона зростає до +/- $60,000. Через це класичний МНК надає надмірну вагу дорогим об'єктам.
 
 # %% [markdown]
 # ### 2.5.4 Перевірка на мультиколінеарність (VIF та кореляції)
@@ -1227,7 +1257,7 @@ plt.show()
 # %% [markdown]
 # ## 2.6 Етап 6. Завдання для глибокого розуміння: Експеримент В (Ridge L2-регуляризація)
 #
-# Оскільки на Етапі 5 виявлено помірну мультиколінеарність між структурними ознаками, реалізуємо Ridge регресію (L2-регуляризацію) на чистому NumPy для стабілізації оцінок коефіцієнтів.
+# Оскільки на Етапі 5 виявлено помірну мультиколінеарність між структурними ознаками, реалізуємо Ridge регресію (L2-регуляризацію)для стабілізації оцінок коефіцієнтів.
 #
 # Математичний апарат Ridge регресії:
 # 1. Функція втрат Ridge:
@@ -1243,40 +1273,26 @@ plt.show()
 
 
 # %%
-class RidgeLRModel:
-    """Pure NumPy Linear Regression with L2 Regularization (Ridge)."""
-
-    lr: float
+class RidgeLRModel(LRModel):
     alpha_reg: float
-    weights: np.ndarray
-    bias: float
 
     def __init__(
         lr_model,  # pyright: ignore
-        lr: float = 0.02,
-        alpha_reg: float = 0.1,
-        weight_vector: np.ndarray | None = None,
-        bias: float = 0.0,
+        lr: float,
+        alpha_reg: float,
+        weight_vector: np.ndarray,
+        bias: float,
     ):
-        lr_model.lr = lr
+        super().__init__(lr=lr, weight_vector=weight_vector, bias=bias)
         lr_model.alpha_reg = alpha_reg
-        lr_model.weights = (
-            weight_vector if weight_vector is not None else np.zeros(0, dtype=float)
-        )
-        lr_model.bias = bias
-
-    def predict(lr_model, feature_matrix: np.ndarray) -> np.ndarray:  # pyright: ignore
-        return (feature_matrix @ lr_model.weights) + lr_model.bias
 
     def compute_loss(
         lr_model,  # pyright: ignore
         feature_matrix: np.ndarray,
         target_vector: np.ndarray,
     ) -> float:
-        n = len(target_vector)
-        predictions = lr_model.predict(feature_matrix)
-        mse_loss = float(np.sum((predictions - target_vector) ** 2) / (2 * n))
-        l2_penalty = float(0.5 * lr_model.alpha_reg * np.sum(lr_model.weights**2))
+        mse_loss = super().compute_loss(feature_matrix, target_vector)
+        l2_penalty = 0.5 * lr_model.alpha_reg * float(np.sum(lr_model.weight_vector**2))
         return mse_loss + l2_penalty
 
     def compute_gradients(
@@ -1284,33 +1300,9 @@ class RidgeLRModel:
         feature_matrix: np.ndarray,
         target_vector: np.ndarray,
     ) -> tuple[np.ndarray, float]:
-        n = len(target_vector)
-        errors = lr_model.predict(feature_matrix) - target_vector
-        grad_w = (feature_matrix.T @ errors) / n + (
-            lr_model.alpha_reg * lr_model.weights
-        )
-        grad_b = float(np.sum(errors) / n)
-        return grad_w, grad_b
-
-    def train(
-        lr_model,  # pyright: ignore
-        feature_matrix: np.ndarray,
-        target_vector: np.ndarray,
-        epochs: int,
-        sampler: BatchSampler,
-    ) -> list[float]:
-        loss_history: list[float] = []
-
-        for _ in range(epochs):
-            for X_batch, y_batch in sampler.get_batches(feature_matrix, target_vector):
-                grad_w, grad_b = lr_model.compute_gradients(X_batch, y_batch)
-                lr_model.weights -= lr_model.lr * grad_w
-                lr_model.bias -= lr_model.lr * grad_b
-
-            epoch_loss = lr_model.compute_loss(feature_matrix, target_vector)
-            loss_history.append(epoch_loss)
-
-        return loss_history
+        w_grad, b_grad = super().compute_gradients(feature_matrix, target_vector)
+        w_grad += lr_model.alpha_reg * lr_model.weight_vector
+        return w_grad, b_grad
 
 
 # %% [markdown]
@@ -1338,7 +1330,7 @@ for lmb in lambda_values:
         sampler=MiniBatchGDSampler(batch_size=64, random_seed=42),
     )
     ridge_models[lmb] = model_ridge
-    ridge_weights[lmb] = model_ridge.weights.copy()
+    ridge_weights[lmb] = model_ridge.weight_vector.copy()
 
 # Compare weights for collinear pairs: GarageCars vs GarageArea, GrLivArea vs TotRmsAbvGrd
 collinear_features_to_plot = [

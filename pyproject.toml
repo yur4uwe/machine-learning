@@ -39,7 +39,3 @@ exclude = [
     "**/models",
 ]
 
-# analysis = {
-#     "diagnosticMode": "openFilesOnly",
-#     "autoSearchPaths": true,
-# }
