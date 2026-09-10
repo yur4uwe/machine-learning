@@ -1204,26 +1204,11 @@ vif_num_table = vif_score(
     X_train[:, num_ordinal_indices], [feature_names[i] for i in num_ordinal_indices]
 )
 
-print("=" * 65)
-print("     NUMERICAL & ORDINAL FEATURES VARIANCE INFLATION FACTOR")
-print("=" * 65)
-print(f"{'Feature':<35} {'VIF':<15} {'Status':<15}")
-print("-" * 65)
-for _, row in vif_num_table.iterrows():
-    status = (
-        "High (>=5)"
-        if row["VIF"] >= 5.0
-        else "Moderate"
-        if row["VIF"] >= 2.5
-        else "Low"
-    )
-    print(f"{row['Feature']:<35} {row['VIF']:<15.2f} {status:<15}")
-print("=" * 65)
-
-# Plot VIF for Numerical Predictors
+# Plot VIF for Numerical Predictors with direct value annotations
 plt.figure(figsize=(10, 5))
 vif_plot_df = vif_num_table.sort_values(by="VIF", ascending=True)
 bars = plt.barh(vif_plot_df["Feature"], vif_plot_df["VIF"], color="#34495e")
+plt.bar_label(bars, fmt="%.2f", padding=5, fontsize=10)
 plt.axvline(
     5.0,
     color="#e74c3c",
@@ -1240,6 +1225,7 @@ plt.axvline(
 )
 plt.title("Numerical & Ordinal Features Variance Inflation Factor (VIF)")
 plt.xlabel("VIF Value")
+plt.xlim(0, max(5.5, float(vif_plot_df["VIF"].max()) + 0.8))
 plt.legend(frameon=True, facecolor="white")
 plt.tight_layout()
 plt.savefig(os.path.join(plots_dir, "assumptions_multicollinearity_vif.png"), dpi=300)
