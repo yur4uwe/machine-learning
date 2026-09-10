@@ -346,7 +346,7 @@ print(f"  X_test:  {X_test_raw.shape}")
 # $$z = \frac{x - \mu}{\sigma}$$
 #
 # Параметри масштабування ($\mu_{\text{train}}$ та $\sigma_{\text{train}}$) обчислюються виключно на вибірці Train та без змін застосовуються до Validation і Test.
-# Наступна комірка містить реалізацію `StandardScaler` на чистому NumPy.
+# Наступна комірка містить реалізацію `StandardScaler`.
 
 
 # %%
@@ -369,7 +369,7 @@ class StandardScaler:
 
     def transform(self, X):
         if self._mean is None or self._std is None:
-            raise ValueError("StandardScalerNumPy has not been fitted yet.")
+            raise ValueError("StandardScaler has not been fitted yet.")
 
         X_arr = np.asarray(X, dtype=float)
         return (X_arr - self._mean) / self._std
@@ -390,7 +390,7 @@ print(f"X_val:   mean={np.mean(X_val):.4f}, std={np.std(X_val):.4f}")
 print(f"X_test:  mean={np.mean(X_test):.4f}, std={np.std(X_test):.4f}")
 
 # %% [markdown]
-# ## 2.2 Етап 2. Реалізація Лінійної Регресії засобами NumPy
+# ## 2.2 Етап 2. Реалізація Лінійної Регресії
 #
 # Модель лінійної регресії має вигляд:
 # $$\hat{y} = \mathbf{X}\mathbf{w} + b\mathbf{1}$$
@@ -1049,7 +1049,7 @@ plt.show()
 #
 # Перевіряємо форму розподілу залишків за допомогою:
 # 1. Гістограми залишків з накладенням теоретичної нормальної кривої щільності.
-# 2. Квантиль-квантиль графіка (Q-Q plot) на чистому NumPy із порівнянням емпіричних квантилів проти стандартного нормального розподілу.
+# 2. Квантиль-квантиль графіка (Q-Q plot) із порівнянням емпіричних квантилів проти стандартного нормального розподілу.
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(16, 6))
@@ -1269,7 +1269,7 @@ plt.show()
 # 3. Правило оновлення ваг (Weight Decay):
 #    $$\mathbf{w}^{(t+1)} = (1 - \alpha \lambda) \mathbf{w}^{(t)} - \alpha \nabla_{\mathbf{w}} J_{\text{MSE}}$$
 #
-# У наступній комірці реалізовано клас `RidgeLRModel` на чистому NumPy.
+# У наступній комірці реалізовано клас `RidgeLRModel`.
 
 
 # %%
