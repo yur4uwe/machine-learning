@@ -8,7 +8,9 @@ dependencies = [
     "matplotlib>=3.11.1",
     "numpy>=2.5.3",
     "pandas>=3.0.5",
+    "scipy>=1.18.1",
     "seaborn>=0.13.2",
+    "statsmodels>=0.15.0",
 ]
 
 [dependency-groups]
@@ -16,3 +18,28 @@ dev = [
     "pandas-stubs>=3.0.5.260730",
 ]
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+useLibraryCodeForTypes = false
+
+include = [
+    "1-linear-regression",
+]
+
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    ".venv",
+    ".git",
+    ".ipynb_checkpoints",
+    "**/data",
+    "**/models",
+]
+
+# analysis = {
+#     "diagnosticMode": "openFilesOnly",
+#     "autoSearchPaths": true,
+# }
