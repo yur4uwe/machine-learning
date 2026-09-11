@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 usage() {
     echo "Usage: $0 <ipynb|html> <input_file> <output_file>"
@@ -37,8 +36,24 @@ case "$TARGET_TYPE" in
     ipynb)
         echo "Converting '$INPUT_PATH' to notebook '$OUTPUT_PATH'..."
         uv run jupytext --to notebook --set-kernel machine-learning "$INPUT_PATH" -o "$OUTPUT_PATH"
+
+        # Execute notebook in place to save outputs directly inside the .ipynb file
+        EXEC_CWD="$(cd "$(dirname "$OUTPUT_PATH")" && pwd)"
+        NOTEBOOK_NAME="$(basename "$OUTPUT_PATH" .ipynb)"
+
+        echo "Executing notebook in '$EXEC_CWD' and updating '$NOTEBOOK_NAME' with outputs..."
+        (
+            cd "$EXEC_CWD"
+            uv run --with nbconvert --with ipykernel jupyter nbconvert \
+                --to notebook \
+                --execute \
+                --inplace \
+                "$NOTEBOOK_NAME"
+        )
+
         echo "Successfully created '$OUTPUT_PATH'."
         ;;
+
     html)
         SOURCE_NOTEBOOK="$INPUT_PATH"
         INPUT_DIR="$(cd "$(dirname "$INPUT_PATH")" && pwd)"

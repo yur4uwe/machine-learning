@@ -1297,10 +1297,52 @@ class RidgeLRModel(LRModel):
 # Навчаємо Ridge-модель при різних значеннях параметра штрафу lambda = 0.0, 0.01, 0.1, 1.0, 10.0, 50.0 та візуалізуємо стиснення вагових коефіцієнтів (Weight Shrinkage).
 
 # %%
+# %% [markdown]
+# ### 2.6.1 Аналіз числа обумовленості матриці $\mathbf{X}^T\mathbf{X}$
+#
+# Обчислюємо спектр власних значень матриці $\mathbf{X}^T\mathbf{X}$ та число обумовленості $\kappa = \frac{\lambda_{\max}}{\lambda_{\min}}$ для виявлення слабкої обумовленості, а також досліджуємо теоретичний та числовий ефект зсуву регуляризацією $\lambda \mathbf{I}$.
+
+# %%
+# Empirical condition number analysis for X^T X
+XtX = X_train.T @ X_train
+eigenvalues = np.sort(np.linalg.eigvalsh(XtX))
+lambda_min_val = float(eigenvalues[0])
+lambda_max_val = float(eigenvalues[-1])
+cond_ols = (
+    float(lambda_max_val / lambda_min_val) if lambda_min_val > 0 else float("inf")
+)
+
+print("=" * 70)
+print("     EIGENVALUES & CONDITION NUMBER ANALYSIS (X^T X)")
+print("=" * 70)
+print(f"Minimum Eigenvalue (lambda_min): {lambda_min_val:.4e}")
+print(f"Maximum Eigenvalue (lambda_max): {lambda_max_val:.4e}")
+print(f"Condition Number kappa(OLS):     {cond_ols:,.2f}")
+print("-" * 70)
+print(
+    f"{'Regularization lambda':<25} {'kappa(X^T X + lambda I)':<25} {'Effective lambda_min':<20}"
+)
+print("-" * 70)
+for lmb in [0.0, 0.01, 0.1, 1.0, 10.0, 50.0]:
+    if lmb + lambda_min_val <= 0:
+        cond_ridge = float("inf")
+    else:
+        cond_ridge = float((lambda_max_val + lmb) / (lambda_min_val + lmb))
+    print(f"{lmb:<25.2f} {cond_ridge:<25,.2f} {(lambda_min_val + lmb):<20.4f}")
+print("=" * 70)
+
+# %% [markdown]
+# ### 2.6.2 Дослідження впливу $\lambda$ на ваги ознак та узагальнюючу здатність
+#
+# Навчаємо Ridge-модель при різних значеннях параметра штрафу $\lambda \in [0.0, 0.01, 0.1, 1.0, 10.0, 50.0]$.
+# Для кожної моделі оцінюємо $R^2$, RMSE та MAE на тренувальній, валідаційній та тестовій вибірках, а також відстежуємо траєкторії коефіцієнтів (Weight Shrinkage).
+
+# %%
 # Ridge Regularization Sweep across different lambda penalty values
 lambda_values = [0.0, 0.01, 0.1, 1.0, 10.0, 50.0]
 ridge_models: dict[float, RidgeLRModel] = {}
 ridge_weights: dict[float, np.ndarray] = {}
+ridge_metrics_records: list[dict[str, float]] = []
 
 for lmb in lambda_values:
     model_ridge = RidgeLRModel(
@@ -1318,7 +1360,38 @@ for lmb in lambda_values:
     ridge_models[lmb] = model_ridge
     ridge_weights[lmb] = model_ridge.weight_vector.copy()
 
-# Compare weights for collinear pairs: GarageCars vs GarageArea, GrLivArea vs TotRmsAbvGrd
+    y_train_pred = model_ridge.predict(X_train)
+    y_val_pred = model_ridge.predict(X_val)
+    y_test_pred = model_ridge.predict(X_test)
+
+    ridge_metrics_records.append(
+        {
+            "lambda": lmb,
+            "Train R^2": r2_score(y_train, y_train_pred),
+            "Val R^2": r2_score(y_val, y_val_pred),
+            "Test R^2": r2_score(y_test, y_test_pred),
+            "Train RMSE": rmse_score(y_train, y_train_pred),
+            "Val RMSE": rmse_score(y_val, y_val_pred),
+            "Test RMSE": rmse_score(y_test, y_test_pred),
+        }
+    )
+
+# Tabular comparison of Ridge generalization performance
+ridge_summary_df = pd.DataFrame(ridge_metrics_records)
+print("\n" + "=" * 92)
+print("                     RIDGE GENERALIZATION PERFORMANCE ACROSS LAMBDA")
+print("=" * 92)
+print(
+    f"{'lambda':<10} {'Train R^2':<12} {'Val R^2':<12} {'Test R^2':<12} {'Val RMSE ($)':<18} {'Test RMSE ($)':<18}"
+)
+print("-" * 92)
+for _, r in ridge_summary_df.iterrows():
+    print(
+        f"{r['lambda']:<10.2f} {r['Train R^2']:<12.4f} {r['Val R^2']:<12.4f} {r['Test R^2']:<12.4f} ${r['Val RMSE']:<17,.2f} ${r['Test RMSE']:<17,.2f}"
+    )
+print("=" * 92)
+
+# Plot 1: Weight Shrinkage for collinear and primary features
 collinear_features_to_plot = [
     "OverallQual",
     "GrLivArea",
@@ -1354,13 +1427,94 @@ plt.tight_layout()
 plt.savefig(os.path.join(plots_dir, "deep_understanding_ridge_weights.png"), dpi=300)
 plt.show()
 
+# Plot 2: Bias-Variance Tradeoff (R^2 across splits)
+plt.figure(figsize=(10, 5))
+plt.plot(
+    range(len(lambda_values)),
+    ridge_summary_df["Train R^2"],
+    marker="s",
+    linewidth=2.0,
+    label="Train $R^2$",
+    color="#2980b9",
+)
+plt.plot(
+    range(len(lambda_values)),
+    ridge_summary_df["Val R^2"],
+    marker="o",
+    linewidth=2.2,
+    label="Validation $R^2$",
+    color="#27ae60",
+)
+plt.plot(
+    range(len(lambda_values)),
+    ridge_summary_df["Test R^2"],
+    marker="^",
+    linewidth=2.0,
+    label="Test $R^2$",
+    color="#e67e22",
+)
+
+plt.xticks(range(len(lambda_values)), [f"$\\lambda={lmb}$" for lmb in lambda_values])
+plt.title(
+    "Ridge Regularization: Generalization Performance ($R^2$) vs Regularization Strength"
+)
+plt.xlabel("Regularization Strength ($\\lambda$)")
+plt.ylabel("$R^2$ Score")
+plt.grid(True, linestyle="--", alpha=0.5)
+plt.legend(frameon=True, facecolor="white")
+plt.tight_layout()
+plt.savefig(
+    os.path.join(plots_dir, "deep_understanding_ridge_performance.png"), dpi=300
+)
+plt.show()
+
 # %% [markdown]
 # Аналіз результатів Ridge-регуляризації:
 #
-# 1. Стиснення ваг та зменшення дисперсії:
-#    Зі збільшенням сили штрафу lambda від 0.0 до 50.0 ваги скорельованих ознак (OverallQual, GrLivArea, GarageCars, YearBuilt) плавно зменшуються в бік нуля, знижуючи чутливість моделі до вибіркових шумів.
+# 1. Емпірична обумовленість матриці X^T X та сингулярність:
+#    Мінімальне власне значення матриці X^T X становить lambda_min = -1.36e-12, що дорівнює нулю для IEEE-754 репрезентації. Причиною виродженості є строго лінійна залежність стовпчиків.
 #
-# 2. Стабілізація градієнтного спуску при поганій обумовленості:
-#    У звичайній лінійній регресії (lambda = 0) матриця Гессе X^T X має близькі до нуля власні значення через мультиколінеарність, через що ландшафт втрат має вигляд витягнутого яру. Додавання штрафу lambda * I зміщує всі власні значення вгору:
-#    $$\lambda_i(\mathbf{X}^T\mathbf{X} + \lambda \mathbf{I}) = \lambda_i(\mathbf{X}^T\mathbf{X}) + \lambda > 0$$
-#    Це суттєво покращує число обумовленості гессіана kappa = (lambda_max + lambda) / (lambda_min + lambda), прискорює та стабілізує траєкторію градієнтного спуску.
+# 2. Ефект спектрального зсуву регуляризацією:
+#    Додавання штрафу lambda * I зміщує спектр матриці гессіана: lambda_i(X^T X + lambda * I) = lambda_i + lambda.
+#    Вже при lambda = 0.01 число обумовленості падає з нескінченності до 517,501. При lambda = 0.10 воно становить 51,751, а при lambda = 50.0 — зменшується до 104.5. Це робить задачу строго опуклою та гарантує стійкість оцінок.
+#
+# 3. Стиснення ваг:
+#    При lambda = 0 ваги колінеарних пар (GarageCars, GarageArea, GrLivArea, TotRmsAbvGrd) мають підвищену дисперсію. Зі зростанням lambda ваги плавно згасають у бік нуля, обмежуючи взаємну деструктивну компенсацію коефіцієнтів.
+#
+# 4. Вплив Ridge регуляризації:
+#    - При lambda = 0.10 досягнуто пік узагальнення: Val R^2 зріс з 0.8221 до 0.8243, а помилка Val RMSE впала з $30,943.84 до мінімальних $30,748.39 (Test R^2 зріс до 0.8590). Регуляризація успішно придушила надмірну вибіркову дисперсію шуму.
+#    - При lambda >= 1.0 спостерігається виражене недонавчання та регуляризаційний штраф починає домінувати над оптимізацією похибки на даних.
+
+# %% [markdown]
+# ## 3. Висновки
+#
+# Під час лабораторної роботи я побудовав модель лінійної регресії для прогнозування вартості житлової нерухомості на наборі даних Ames Housing. За допомогою цього я провів інженерію ознак, порівняльний аналізу градієнтних оптимізаторів, діагностики припущень та дослідження механізмів регуляризації.
+#
+# ### 1. Динаміка оптимізації та вибір режиму навчання
+# Порівняльний аналіз трьох варіантів градієнтного спуску продемонстрував фундаментальні відмінності в їхній поведінці:
+# - Повний градієнтний спуск (Batch GD) формує гладку, монотонну траєкторію мінімізації функції втрат, проте вимагає обчислення градієнта за всією вибіркою на кожній ітерації.
+# - Стохастичний спуск (SGD) забезпечує часті оновлення параметрів, що сповільнює фінальну стабілізацію.
+# - Міні-батч градієнтний спуск (Mini-Batch GD із розміром батчу B = 64) виявився непоганим компромісом, поєднуючи стабілізуючий ефект усереднення градієнтів із векторною ефективністю обчислень, досягаючи найшвидшої збіжності за мінімальну кількість епох.
+#
+# ### 2. Узагальнення моделі
+# Підсумкова модель демонструє високу прогностичну якість на тестовій вибірці:
+# - Коефіцієнт детермінації R^2 становить 0.859, що свідчить про пояснення майже 86% загальної дисперсії ринкової вартості будинків.
+# - Середня абсолютна похибка (MAE) складає близько $18,360, а середньоквадратична похибка (RMSE) — $26,870.
+# - Тестова вибірка показала дещо вищу метрику R^2 порівняно з тренувальною (0.859 проти 0.807), що зумовлено вдалим випадковим розподілом даних під час розбиття: найбільш екстремальні нелінійні викиди (будинки площею понад 4000 кв. футів із нетипово низькими цінами) потрапили до тренувального спліту, не дестабілізувавши тестову оцінку.
+#
+# ### 3. Діагностика припущень теореми Гаусса-Маркова
+# Аналіз залишків розкрив як сильні сторони лінійного наближення, так і межі його застосовності:
+#
+# Аналіз Q-Q графіка та гістограми залишків показав високу узгодженість із нормальним законом у межах двох стандартних відхилень (+-2 sigma), що охоплює понад 95% спостережень. Водночас розподіл має лептокуртичний характер (важкі хвости), викликаний рідкісними екстремальними ціновими аномаліями.
+#
+# Діаграма масштаб-локалізація продемонструвала наявність помірного позитивного тренду дисперсії залишків (кутовий коефіцієнт k = 1.56e-06, вільний член b = 0.45). Зі зростанням ціни обʼєкта абсолютна невизначеність прогнозу зростає, що є природною властивістю ринку нерухомості.
+#
+# Структурні предиктори (зокрема якість оздоблення, житлова площа, характеристики гаража) мають помірний інфляційний фактор дисперсії (VIF від 1.6 до 3.1). Це не руйнує загальну точність, проте збільшує невпевненість в індивідуальних оцінках ваг окремих ознак.
+#
+# ### 4. Регуляризація та Bias-Variance Tradeoff
+# Аналіз власних значень матриці нормальних рівнянь зафіксував числову виродженість (мінімальне власне значення на рівні машинного нуля через використання бінарних індикаторів категорій), що формально робить звичайну оцінку найменших квадратів нестійкою.
+# Введення L2-регуляризації (Ridge) дозволило емпірично спостерігати фундаментальний компроміс теорії навчання (Bias-Variance Tradeoff):
+# - При помірному штрафі (lambda = 0.10) регуляризація забезпечує спектральний зсув, ліквідує виродженість та ефективно згладжує вибіркову дисперсію. Це призводить до покращення узагальнення: валідаційна похибка RMSE знижується з $30,943.84 до мінімальних $30,748.39, а валідаційний R^2 досягає максимуму 0.8243.
+# - При надмірній силі штрафу (lambda >= 1.0) регуляризаційний член починає домінувати над оптимізацією похибки на навчальних прикладах, спричиняючи різке недонавчання (при lambda = 50 якість падає до R^2 = 0.1585).
+#
+# Таким чином, робота продемонструвала, що лінійна регресія за умови грамотної підготовки даних та виваженого регуляризаційного контролю залишається високоефективним, інтерпретованим та математично надійним інструментом моделювання складних економічних процесів.
