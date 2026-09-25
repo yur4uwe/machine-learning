@@ -972,6 +972,92 @@ plt.show()
 #    - Усі три оптимізатори демонструють практично однакову фінальну точність, оскільки цільова квадратична функція втрат є строго опуклою і має єдиний глобальний оптимум.
 
 # %% [markdown]
+# ### 2.4.3 Порівняння: Вихідна цільова змінна vs. Логарифмована (Raw Target vs. Log-Transformed Target)
+#
+# На Етапі 1.4 було встановлено, що розподіл `SalePrice` має виражену правосторонню асиметрію (Skewness $\approx 1.88$).
+# При навчанні на вихідних цінах у доларах:
+# 1. Значення функції втрат вимірюється в доларах у квадраті $(\$^2)$, тому втрати мають порядок $\approx 6.5 \times 10^8$. Це не свідчить про розбіжність, а є прямим наслідком розмірності величини.
+# 2. Модель надає надмірну вагу поодиноким дорогим будинкам, оскільки квадратична помилка на них у рази перекриває помилки на бюджетному житлі.
+#
+# Логарифмічне перетворення цільової змінної $y_{\text{log}} = \ln(1 + y)$ нормалізує масштаб:
+# 1. Значення втрат у логарифмічній шкалі знижується до величин порядку $\approx 0.012$.
+# 2. Модель мінімізує відносну відсоткову похибку (RMSLE), що робить прогнози стійкішими до екстремальних викидів.
+#
+# Нижче наведено експеримент: навчаємо Mini-Batch GD на логарифмованій цілі, після чого інвертуємо прогнози назад у реальні долари $\hat{y} = \exp(\hat{y}_{\text{log}}) - 1$ та порівнюємо метрики на тестовій вибірці.
+
+# %%
+# 1. Логарифмування цільової змінної для Train, Val, Test
+y_train_log = np.log1p(y_train)
+y_val_log = np.log1p(y_val)
+y_test_log = np.log1p(y_test)
+
+# 2. Навчання моделі Mini-Batch GD на log-цілі (B = 64, lr = 0.01)
+model_mbgd_log = LRModel(lr=0.01, weight_vector=np.zeros(num_features), bias=0.0)
+history_mbgd_log = model_mbgd_log.train(
+    X_train,
+    y_train_log,
+    epochs=epochs,
+    sampler=MiniBatchGDSampler(batch_size=64, random_seed=42),
+)
+
+# 3. Отримання прогнозів у log-шкалі та їхнє зворотне перетворення в долари
+y_test_pred_log_space = model_mbgd_log.predict(X_test)
+y_test_pred_dollars_from_log = np.expm1(y_test_pred_log_space)
+
+# 4. Обчислення метрик у доларах для обох підходів
+r2_raw_test = r2_score(y_test, y_test_pred_mbgd)
+rmse_raw_test = rmse_score(y_test, y_test_pred_mbgd)
+mae_raw_test = mae_score(y_test, y_test_pred_mbgd)
+
+r2_log_test = r2_score(y_test, y_test_pred_dollars_from_log)
+rmse_log_test = rmse_score(y_test, y_test_pred_dollars_from_log)
+mae_log_test = mae_score(y_test, y_test_pred_dollars_from_log)
+
+# Таблиця порівняння
+print("=" * 82)
+print("       COMPARISON: RAW TARGET (SalePrice) vs. LOG TARGET (log1p(SalePrice))")
+print("=" * 82)
+print(f"{'Target Variable':<28} {'Final Train Loss':<20} {'Test R^2':<12} {'Test RMSE ($)':<16} {'Test MAE ($)':<14}")
+print("-" * 82)
+print(f"{'Raw SalePrice ($)':<28} {history_mbgd[-1]:<20,.2f} {r2_raw_test:<12.4f} ${rmse_raw_test:<15,.2f} ${mae_raw_test:<13,.2f}")
+print(f"{'log1p(SalePrice)':<28} {history_mbgd_log[-1]:<20.6f} {r2_log_test:<12.4f} ${rmse_log_test:<15,.2f} ${mae_log_test:<13,.2f}")
+print("-" * 82)
+print(f"Absolute Improvement:        Loss scale normalized | R^2: {r2_log_test - r2_raw_test:+.4f} | RMSE: -${rmse_raw_test - rmse_log_test:,.2f} | MAE: -${mae_raw_test - mae_log_test:,.2f}")
+print("=" * 82)
+
+# 5. Порівняльний Parity Plot (Фактичні vs. Прогнозовані ціни у доларах)
+fig, axes = plt.subplots(1, 2, figsize=(16, 7), sharey=True)
+
+# Графік 1: Raw Target
+axes[0].scatter(y_test, y_test_pred_mbgd, color="#2980b9", alpha=0.65, label="Raw Target Preds")
+axes[0].plot([min_val, max_val], [min_val, max_val], color="#e74c3c", linestyle="--", linewidth=2.0, label="y = x")
+axes[0].set_title(f"Model A: Raw SalePrice ($)\n$R^2 = {r2_raw_test:.4f}$ | $\\text{{RMSE}} = \\${rmse_raw_test:,.2f}$")
+axes[0].set_xlabel("Actual SalePrice ($)")
+axes[0].set_ylabel("Predicted SalePrice ($)")
+axes[0].legend(frameon=True, facecolor="white")
+
+# Графік 2: Log-Transformed Target
+axes[1].scatter(y_test, y_test_pred_dollars_from_log, color="#27ae60", alpha=0.65, label="Log Target Preds (expm1)")
+axes[1].plot([min_val, max_val], [min_val, max_val], color="#e74c3c", linestyle="--", linewidth=2.0, label="y = x")
+axes[1].set_title(f"Model B: log1p(SalePrice) $\\rightarrow$ expm1\n$R^2 = {r2_log_test:.4f}$ | $\\text{{RMSE}} = \\${rmse_log_test:,.2f}$")
+axes[1].set_xlabel("Actual SalePrice ($)")
+axes[1].legend(frameon=True, facecolor="white")
+
+plt.tight_layout()
+plt.savefig(os.path.join(plots_dir, "comparison_raw_vs_log_parity.png"), dpi=300)
+plt.show()
+
+# %% [markdown]
+# Висновки з порівняння:
+# 1. Значення функції втрат:
+#    - Модель на вихідних даних демонструє фінальні втрати $\approx 652 \times 10^6 \ (\$^2)$, тоді як логарифмована модель має втрати $\approx 0.012 \ (\text{log } \$)^2$. Така різниця пояснюється виключно одиницями виміру, а не розбіжністю алгоритму.
+# 2. Прогностична точність у реальних доларах:
+#    - Перехід на логарифмовану ціль підвищує коефіцієнт детермінації $R^2$ з $0.8591$ до $0.8853$ ($+2.62\%$ поясненої дисперсії).
+#    - Середньоквадратична помилка (RMSE) зменшується на понад $\$2{,}600$ (з $\$26{,}869.60$ до $\$24{,}241.74$), а середня абсолютна помилка (MAE) падає на понад $\$2{,}100$.
+# 3. Усунення впливу екстремальних викидів:
+#    - На порівняльному графіку розсіювання видно, що логарифмована модель значно точніше прогнозує середній та бюджетний цінові сегменти, оскільки відхилення оцінюються пропорційно (у відсотках), а не в абсолютних сумах.
+
+# %% [markdown]
 # ## 2.5 Етап 5. Перевірка статистичних припущень
 #
 # Лінійна регресія є статистичною моделлю, оцінки якої спираються на припущення Гаусса-Маркова.
