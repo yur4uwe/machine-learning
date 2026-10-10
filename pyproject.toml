@@ -8,12 +8,15 @@ dependencies = [
     "jupytext>=1.19.5",
     "matplotlib>=3.11.1",
     "numpy>=2.5.3",
+    "optuna>=5.0.0",
     "pandas>=3.0.5",
     "scikit-learn>=1.9.1",
     "scipy>=1.18.1",
     "seaborn>=0.13.2",
+    "shap>=0.53.0",
     "spacy>=3.8.16",
     "statsmodels>=0.15.0",
+    "xgboost>=3.4.1",
 ]
 
 [dependency-groups]
