@@ -130,20 +130,28 @@ def clean_col_name(col: str) -> str:
 
 feat_df = feat_df.rename(columns=clean_col_name)
 
-# Identify empty and constant columns
-empty_cols = [c for c in feat_df.columns if feat_df[c].isna().all()]
-constant_cols = [
-    c
-    for c in feat_df.columns
-    if feat_df[c].nunique(dropna=True) == 1 and feat_df[c].isna().sum() == 0
-]
-single_value_cols = [c for c in feat_df.columns if feat_df[c].nunique(dropna=True) == 1]
-cols_to_drop = empty_cols + constant_cols + single_value_cols
+feat_df = feat_df.rename(columns=clean_col_name)
+assert feat_df.columns.is_unique, "Duplicate column names after cleaning"
+
+n_unique = feat_df.nunique(dropna=True)
+n_missing = feat_df.isna().sum()
+
+empty_cols = n_unique.index[n_unique == 0].tolist()
+
+constant_cols = n_unique.index[(n_unique == 1) & (n_missing == 0)].tolist()
+
+single_value_with_nan = n_unique.index[(n_unique == 1) & (n_missing > 0)].tolist()
+
+cols_to_drop = empty_cols + constant_cols  # disjoint by construction
 
 print(f"Повністю порожні колонки ({len(empty_cols)}): {empty_cols}")
-print(f"Константні колонки ({len(constant_cols)}): {constant_cols}")
-print(f"Ознаки з <= 1 спостереженням ({len(single_value_cols)}): {single_value_cols}")
+print(f"Константні колонки без пропусків ({len(constant_cols)}): {constant_cols}")
+print(
+    f"Одне значення + пропуски, залишаємо ({len(single_value_with_nan)}): {single_value_with_nan}"
+)
 print(f"Видаляємо {len(cols_to_drop)} колонок.")
+
+X_clean = feat_df.drop(columns=cols_to_drop).copy()
 
 # Drop uninformative columns
 X_clean = feat_df.drop(columns=cols_to_drop).copy()
@@ -561,7 +569,7 @@ for m in models:
     )
 
 table_4 = pd.DataFrame(table_4_rows)
-print(table_4)
+print(table_4.to_string(index=False, max_colwidth=None, justify="left"))
 
 # %% [markdown]
 # ### Графік 3: Історія оптимізації та важливість параметрів
