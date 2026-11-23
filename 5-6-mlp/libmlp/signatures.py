@@ -4,6 +4,8 @@ import os
 lib_path = os.path.join(os.path.dirname(__file__), "libmlp.so")
 lib = ctypes.CDLL(lib_path)
 
+lib.set_seed.argtypes = [ctypes.c_uint64]
+
 lib.model_destroy.argtypes = [ctypes.c_void_p]
 lib.model_create.restype = ctypes.c_void_p
 

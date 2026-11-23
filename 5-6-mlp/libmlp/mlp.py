@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 import numpy as np
+
 from .signatures import lib
 
 
@@ -12,7 +13,11 @@ class Activation(IntEnum):
     SOFTMAX = 2
 
 
-def CCE(preds: np.ndarray, actual: np.ndarray) -> float:
+def set_rng_seed(seed: int):
+    lib.set_seed(seed)
+
+
+def cce(preds: np.ndarray, actual: np.ndarray) -> float:
     preds = np.ascontiguousarray(preds, dtype=np.float64)
     actual = np.ascontiguousarray(actual, dtype=np.int32)
     preds_c = preds.ctypes.data_as(ctypes.POINTER(ctypes.c_double))

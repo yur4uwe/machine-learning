@@ -4,3 +4,8 @@
 **/main.html
 **/*_temp.ipynb
 **/ML*Practice.md
+
+# precompiled libraries
+*.so 
+*.dll
+*.dylib

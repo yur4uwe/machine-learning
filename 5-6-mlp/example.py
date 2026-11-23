@@ -1,23 +1,26 @@
 import numpy as np
-from libmlp import CCE, MLP, Activation, DenseLayer
+from libmlp import MLP, Activation, DenseLayer, cce, set_rng_seed
+
+BAD_SEED = 142
+GOOD_SEED = 420
 
 if __name__ == "__main__":
-    # 1. Define model architecture
+    set_rng_seed(GOOD_SEED)
+
     model = MLP(
         DenseLayer(inp_features=2, out_features=8, activation=Activation.RELU),
         DenseLayer(inp_features=8, out_features=2, activation=Activation.SOFTMAX),
     )
 
-    # 2. XOR dataset
+    # XOR dataset
     X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float64)
     y = np.array([0, 1, 1, 0], dtype=np.int32)
 
     print("Initial Predictions:")
     initial_preds = model.forward(X)
     print(np.round(initial_preds, 4))
-    print(f"Initial Cross-Entropy Loss: {CCE(initial_preds, y):.4f}\n")
+    print(f"Initial Cross-Entropy Loss: {cce(initial_preds, y):.4f}\n")
 
-    # 3. Training loop
     learning_rate = 0.2
     epochs = 500
 
@@ -34,4 +37,4 @@ if __name__ == "__main__":
 
     predicted_classes = np.argmax(final_preds, axis=1)
     print(f"Predicted Classes: {predicted_classes.tolist()} (Expected: {y.tolist()})")
-    print(f"Final Cross-Entropy Loss: {CCE(final_preds, y):.4f}")
+    print(f"Final Cross-Entropy Loss: {cce(final_preds, y):.4f}")

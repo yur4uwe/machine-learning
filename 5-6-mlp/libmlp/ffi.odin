@@ -1,8 +1,15 @@
 package mlp
 
 import "base:runtime"
+import "core:math/rand"
 import "core:mem"
 import "core:slice"
+
+@(export)
+set_seed :: proc "c" (seed: u64) {
+	context = runtime.default_context()
+	rand.reset(seed)
+}
 
 @(export)
 model_forward_ffi :: proc "c" (

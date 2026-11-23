@@ -1,3 +1,3 @@
-from .mlp import CCE, MLP, Activation, DenseLayer
+from .mlp import MLP, Activation, DenseLayer, cce, set_rng_seed
 
-__all__ = ["CCE", "MLP", "Activation", "DenseLayer"]
+__all__ = ["MLP", "Activation", "DenseLayer", "cce", "set_rng_seed"]
