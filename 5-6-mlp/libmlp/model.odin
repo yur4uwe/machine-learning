@@ -15,19 +15,19 @@ model_forward :: proc(m: Model, input: Matrix) -> Matrix {
 	return prev
 }
 
-cross_entropy_loss :: proc "contextless" (probs: Matrix, targets: []int) -> f64 {
+cross_entropy_loss :: proc "contextless" (probs: Matrix, targets: []i32) -> f64 {
 	eps := 1e-15
 	n := f64(probs.rows)
 	sum := 0.0
 	for i in 0 ..< probs.rows {
-		idx := i * stride(probs) + targets[i]
+		idx := i * stride(probs) + int(targets[i])
 		prob := clamp(probs.data[idx], eps, 1.0 - eps)
 		sum += math.ln(prob)
 	}
 	return (-1 / n) * sum
 }
 
-model_backward :: proc(model: Model, input, probs: Matrix, targets: []int) {
+model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
 	// On all layers: rows are sample counts
 
 	sample_cnt := probs.rows
@@ -56,7 +56,7 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []int) {
 	for sample in 0 ..< sample_cnt {
 		for class in 0 ..< class_cnt {
 			idx := sample * stride(errors) + class
-			if class != targets[sample] {
+			if class != int(targets[sample]) {
 				errors.data[idx] = probs.data[idx]
 			} else {
 				errors.data[idx] = probs.data[idx] - 1.0
@@ -149,8 +149,8 @@ model_optimizer :: proc(m: Model, learning_rate: f64) {
 train :: proc(
 	m: Model,
 	input: Matrix,
-	targets: []int,
-	training_steps: int = 500,
+	targets: []i32,
+	training_steps: i32 = 500,
 	learning_rate: f64 = 0.01,
 ) {
 	loss: f64
