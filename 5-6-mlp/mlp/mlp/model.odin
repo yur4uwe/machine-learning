@@ -17,9 +17,9 @@ model_forward :: proc(m: Model, input: Matrix) -> Matrix {
 
 cross_entropy_loss :: proc "contextless" (probs: Matrix, targets: []int) -> f64 {
 	eps := 1e-15
-	n := f64(probs.shape.row_cnt)
+	n := f64(probs.rows)
 	sum := 0.0
-	for i in 0 ..< probs.shape.row_cnt {
+	for i in 0 ..< probs.rows {
 		idx := i * stride(probs) + targets[i]
 		prob := clamp(probs.data[idx], eps, 1.0 - eps)
 		sum += math.ln(prob)
@@ -30,15 +30,15 @@ cross_entropy_loss :: proc "contextless" (probs: Matrix, targets: []int) -> f64 
 model_backward :: proc(model: Model, input, probs: Matrix, targets: []int) {
 	// On all layers: rows are sample counts
 
-	sample_cnt := probs.shape.row_cnt
-	class_cnt := probs.shape.col_cnt
+	sample_cnt := probs.rows
+	class_cnt := probs.cols
 
 	// Its worth to find the layer with biggest feature count to reserve memory
 	// for 2 of those
 
 	max_feats := -1
 	for layer in model {
-		max_feats = max(max_feats, layer.weights.shape.row_cnt, layer.weights.shape.col_cnt)
+		max_feats = max(max_feats, layer.weights.rows, layer.weights.cols)
 	}
 
 	current_errors_prealloc := make([]f64, sample_cnt * max_feats)
@@ -47,8 +47,9 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []int) {
 	defer delete(backprop_errors_prealloc)
 
 	errors := Matrix {
-		data  = current_errors_prealloc,
-		shape = probs.shape,
+		data = current_errors_prealloc[:probs.rows * probs.cols],
+		rows = probs.rows,
+		cols = probs.cols,
 	}
 
 	// initial cross entropy errors
@@ -72,12 +73,13 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []int) {
 			prev_res = input
 		}
 
-		in_feat_cnt := prev_res.shape.col_cnt
-		out_feat_cnt := curr_l.weights.shape.col_cnt
+		in_feat_cnt := prev_res.cols
+		out_feat_cnt := curr_l.weights.cols
 
 		grad_w := Matrix {
-			data  = make([]f64, in_feat_cnt * out_feat_cnt),
-			shape = {in_feat_cnt, out_feat_cnt},
+			data = make([]f64, in_feat_cnt * out_feat_cnt),
+			rows = in_feat_cnt,
+			cols = out_feat_cnt,
 		}
 
 		// Weight gradient calculation X^T * delta
@@ -107,8 +109,9 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []int) {
 
 		prev_errors := Matrix {
 			// I would like to reuse space for errors from previous steps
-			data  = backprop_errors_prealloc,
-			shape = {sample_cnt, in_feat_cnt},
+			data = backprop_errors_prealloc[:sample_cnt * in_feat_cnt],
+			rows = sample_cnt,
+			cols = in_feat_cnt,
 		}
 
 		// Backprop error: delta * W^T
@@ -158,11 +161,18 @@ train :: proc(
 		if step % 100 == 0 {
 			fmt.printfln("step %d: loss: %f", step, loss)
 			fmt.print("Predictions:\n[")
-			for v, i in probs.data {
+			for i in 0 ..< probs.rows {
 				if i > 0 {
 					fmt.print(", ")
 				}
-				fmt.printf("%.2f", v)
+				fmt.print("[")
+				for j in 0 ..< probs.cols {
+					if j > 0 {
+						fmt.print(", ")
+					}
+					fmt.printf("%.2f", probs.data[i * stride(probs) + j])
+				}
+				fmt.print("]")
 			}
 			fmt.println("]")
 		}

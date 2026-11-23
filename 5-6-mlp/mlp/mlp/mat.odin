@@ -3,30 +3,28 @@ package mlp
 import "core:fmt"
 // Row major matrix
 Matrix :: struct {
-	data:  []f64,
-	shape: struct {
-		row_cnt: int,
-		col_cnt: int,
-	},
+	data: []f64,
+	rows: int,
+	cols: int,
 }
 
 major_access :: proc(m: ^Matrix, row_idx: int) -> ([]f64, bool) {
-	if m.shape.row_cnt < row_idx {
+	if m.rows < row_idx {
 		return nil, false
 	}
-	row_start := m.shape.col_cnt * row_idx
-	row_end := row_start + m.shape.col_cnt
+	row_start := m.cols * row_idx
+	row_end := row_start + m.cols
 	return m.data[row_start:row_end], true
 }
 
 minor_access :: proc()
 
 el_access :: proc(m: ^Matrix, row_idx: int, col_idx: int) -> (f64, bool) {
-	if m.shape.row_cnt <= row_idx || m.shape.col_cnt <= col_idx {
+	if m.rows <= row_idx || m.cols <= col_idx {
 		return 0.0, false
 	}
 
-	act_idx := m.shape.col_cnt * row_idx + col_idx
+	act_idx := m.cols * row_idx + col_idx
 
 	fmt.printfln("access at: [%d][%d] with flattened %d", row_idx, col_idx, act_idx)
 
@@ -34,11 +32,11 @@ el_access :: proc(m: ^Matrix, row_idx: int, col_idx: int) -> (f64, bool) {
 }
 
 el_update :: proc(m: ^Matrix, row_idx: int, col_idx: int, v: f64) -> bool {
-	if m.shape.row_cnt <= row_idx || m.shape.col_cnt <= col_idx {
+	if m.rows <= row_idx || m.cols <= col_idx {
 		return false
 	}
 
-	act_idx := m.shape.col_cnt * row_idx + col_idx
+	act_idx := m.cols * row_idx + col_idx
 
 	fmt.printfln("update at: [%d][%d] with flattened %d", row_idx, col_idx, act_idx)
 
@@ -47,7 +45,7 @@ el_update :: proc(m: ^Matrix, row_idx: int, col_idx: int, v: f64) -> bool {
 }
 
 stride :: #force_inline proc "contextless" (m: Matrix) -> int {
-	return m.shape.col_cnt
+	return m.cols
 }
 
 matmul_dst :: proc(
@@ -59,20 +57,20 @@ matmul_dst :: proc(
 	transpose_rhs: bool = false,
 ) {
 
-	lhs_rows := transpose_lhs ? lhs.shape.col_cnt : lhs.shape.row_cnt
-	lhs_cols := transpose_lhs ? lhs.shape.row_cnt : lhs.shape.col_cnt
+	lhs_rows := transpose_lhs ? lhs.cols : lhs.rows
+	lhs_cols := transpose_lhs ? lhs.rows : lhs.cols
 
-	rhs_rows := transpose_rhs ? rhs.shape.col_cnt : rhs.shape.row_cnt
-	rhs_cols := transpose_rhs ? rhs.shape.row_cnt : rhs.shape.col_cnt
+	rhs_rows := transpose_rhs ? rhs.cols : rhs.rows
+	rhs_cols := transpose_rhs ? rhs.rows : rhs.cols
 
 
 	if lhs_cols != rhs_rows {
 		fmt.printfln(
 			"matrix shapes diverge: lhs %d*%d, rhs %d*%d",
-			lhs.shape.row_cnt,
-			lhs.shape.col_cnt,
-			rhs.shape.row_cnt,
-			rhs.shape.col_cnt,
+			lhs.rows,
+			lhs.cols,
+			rhs.rows,
+			rhs.cols,
 		)
 		return
 	}
@@ -102,10 +100,10 @@ matmul_ret :: proc(
 	transpose_lhs: bool = false,
 	transpose_rhs: bool = false,
 ) -> Matrix {
-	data_size := lhs.shape.row_cnt * rhs.shape.col_cnt
+	data_size := lhs.rows * rhs.cols
 	data := make([]f64, data_size)
 
-	m := Matrix{data, {lhs.shape.row_cnt, rhs.shape.col_cnt}}
+	m := Matrix{data, lhs.rows, rhs.cols}
 
 	matmul_dst(lhs, rhs, bias, m, scale, transpose_lhs, transpose_rhs)
 

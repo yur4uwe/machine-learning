@@ -21,12 +21,12 @@ drelu :: proc "contextless" (v: f64) -> f64 {
 }
 
 softmax :: proc "contextless" (m: Matrix) -> Matrix {
-	for i in 0 ..< m.shape.row_cnt {
+	for i in 0 ..< m.rows {
 		// use a numeric trick where:
 		// exp(xi - C) / sum(exp(xj - C)) == exp(xi) / sum(exp(xj))
 
 		row_start := i * stride(m)
-		row := m.data[row_start:row_start + m.shape.col_cnt]
+		row := m.data[row_start:row_start + m.cols]
 
 		maximum := slice.max(row)
 		sum := 0.0

@@ -22,19 +22,20 @@ he_init :: proc(in_feat: int, out_feat: int, act: Activation) -> Layer {
 	for i in 0 ..< in_feat * out_feat {
 		weights[i] = rand.float64_range(-he_limit, he_limit)
 	}
-	m := Matrix{weights, {row_cnt = in_feat, col_cnt = out_feat}}
+	m := Matrix{weights, in_feat, out_feat}
 
 	bias := make([]f64, out_feat)
 	return Layer{weights = m, biases = bias, activation = act}
 }
 
 layer_forward :: proc(prev: Matrix, curr: ^Layer) -> Matrix {
-	data_size := prev.shape.row_cnt * curr.weights.shape.col_cnt
+	data_size := prev.rows * curr.weights.cols
 
 	if len(curr.result.data) != data_size {
 		delete(curr.result.data)
 		curr.result.data = make([]f64, data_size)
-		curr.result.shape = {prev.shape.row_cnt, curr.weights.shape.col_cnt}
+		curr.result.rows = prev.rows
+		curr.result.cols = curr.weights.cols
 	}
 
 	matmul(prev, curr.weights, curr.biases, curr.result)
