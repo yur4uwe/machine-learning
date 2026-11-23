@@ -1,13 +1,14 @@
 package mlp
 
-import "core:fmt"
-
-Model :: []Layer
+Model :: struct {
+	layers: [dynamic]Layer,
+	loss:   Loss,
+}
 
 model_forward :: proc(m: Model, input: Matrix) -> Matrix {
 	prev := input
 
-	for &l in m {
+	for &l in m.layers {
 		prev = layer_forward(prev, &l)
 	}
 
@@ -15,7 +16,7 @@ model_forward :: proc(m: Model, input: Matrix) -> Matrix {
 }
 
 
-model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
+model_backward :: proc(model: Model, input, probs: Matrix, targets: Matrix) {
 	// On all layers: rows are sample counts
 
 	sample_cnt := probs.rows
@@ -25,7 +26,7 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
 	// for 2 of those
 
 	max_feats := -1
-	for layer in model {
+	for layer in model.layers {
 		max_feats = max(max_feats, layer.weights.rows, layer.weights.cols)
 	}
 
@@ -40,23 +41,14 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
 		cols = probs.cols,
 	}
 
-	// initial cross entropy errors
-	for sample in 0 ..< sample_cnt {
-		for class in 0 ..< class_cnt {
-			idx := sample * stride(errors) + class
-			if class != int(targets[sample]) {
-				errors.data[idx] = probs.data[idx]
-			} else {
-				errors.data[idx] = probs.data[idx] - 1.0
-			}
-		}
-	}
+	last_l := &model.layers[len(model.layers) - 1]
+	compute_initial_error(model.loss, last_l.activation, last_l.pre_act, probs, targets, errors)
 
-	for l := len(model) - 1; l >= 0; l -= 1 {
-		curr_l := &model[l]
+	for l := len(model.layers) - 1; l >= 0; l -= 1 {
+		curr_l := &model.layers[l]
 		prev_res: Matrix
 		if l > 0 {
-			prev_res = model[l - 1].post_act
+			prev_res = model.layers[l - 1].post_act
 		} else {
 			prev_res = input
 		}
@@ -107,8 +99,8 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
 		// delta is still (Sample, Class)
 		matmul(errors, curr_l.weights, dst = prev_errors, transpose_rhs = true)
 
-		prev_activation := model[l - 1].activation
-		prev_z := model[l - 1].pre_act
+		prev_activation := model.layers[l - 1].activation
+		prev_z := model.layers[l - 1].pre_act
 		layer_activation_deriv(prev_activation, prev_z, prev_errors)
 
 		errors = prev_errors
@@ -122,7 +114,7 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
 }
 
 model_optimizer :: proc(m: Model, learning_rate: f64) {
-	for &l in m {
+	for &l in m.layers {
 		for &w, i in l.weights.data {
 			w -= learning_rate * l.weight_grad.data[i]
 		}
@@ -131,42 +123,4 @@ model_optimizer :: proc(m: Model, learning_rate: f64) {
 			v -= learning_rate * l.bias_grad[i]
 		}
 	}
-}
-
-train :: proc(
-	m: Model,
-	input: Matrix,
-	targets: []i32,
-	training_steps: i32 = 500,
-	learning_rate: f64 = 0.01,
-) {
-	loss: f64
-	for step in 1 ..= training_steps {
-		probs := model_forward(m, input)
-
-		loss = cross_entropy_loss(probs, targets)
-		if step % 100 == 0 {
-			fmt.printfln("step %d: loss: %f", step, loss)
-			fmt.print("Predictions:\n[")
-			for i in 0 ..< probs.rows {
-				if i > 0 {
-					fmt.print(", ")
-				}
-				fmt.print("[")
-				for j in 0 ..< probs.cols {
-					if j > 0 {
-						fmt.print(", ")
-					}
-					fmt.printf("%.2f", probs.data[i * stride(probs) + j])
-				}
-				fmt.print("]")
-			}
-			fmt.println("]")
-		}
-
-		model_backward(m, input, probs, targets)
-		model_optimizer(m, learning_rate)
-	}
-
-	fmt.printfln("Final loss: %f", loss)
 }

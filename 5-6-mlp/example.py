@@ -1,5 +1,5 @@
 import numpy as np
-from libmlp import MLP, Activation, DenseLayer, cce, set_rng_seed
+from libmlp import MLP, Activation, DenseLayer, Loss, cce, set_rng_seed
 
 BAD_SEED = 142
 GOOD_SEED = 420
@@ -8,6 +8,7 @@ if __name__ == "__main__":
     set_rng_seed(GOOD_SEED)
 
     model = MLP(
+        Loss.CCE,
         DenseLayer(inp_features=2, out_features=8, activation=Activation.RELU),
         DenseLayer(inp_features=8, out_features=2, activation=Activation.SOFTMAX),
     )

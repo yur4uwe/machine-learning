@@ -9,12 +9,14 @@ magic_bytes :: "Tsar MLP1"
 save_model :: proc(m: Model, f: ^os.File) {
 	os.write_string(f, magic_bytes)
 
-	layers := u32(len(m))
+	layers := u32(len(m.layers))
 	b: [4]byte
 	endian.put_u32(b[:], .Little, layers)
 	os.write_slice(f, b[:])
 
-	for &layer in m {
+	os.write_byte(f, u8(m.loss))
+
+	for &layer in m.layers {
 		inp_features := u32(layer.weights.rows)
 		endian.put_u32(b[:], .Little, inp_features)
 		os.write_slice(f, b[:])
@@ -45,7 +47,7 @@ load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
 	os.read_full(f, buf)
 
 	if string(buf) != magic_bytes {
-		return nil, Format_Error(0)
+		return Model{}, Format_Error(0)
 	}
 
 	len_buf := buf[:4]
@@ -53,11 +55,17 @@ load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
 
 	l_cnt, ok := endian.get_u32(len_buf, .Little)
 	if !ok {
-		return nil, Format_Error(1)
+		return Model{}, Format_Error(1)
 	}
 
-	ls := make([]Layer, l_cnt)
-	model = ls
+	loss_func_t_buf := buf[:1]
+	os.read_full(f, loss_func_t_buf)
+
+	ls := make([dynamic]Layer, l_cnt)
+	model = Model {
+		layers = ls,
+		loss   = Loss(loss_func_t_buf[0]),
+	}
 
 	for i in 0 ..< l_cnt {
 		// 9 should be allocated for magic bytes already
@@ -68,37 +76,37 @@ load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
 
 		inp_features, ok = endian.get_u32(buf[0:4], .Little)
 		if !ok {
-			return nil, Format_Error(2)
+			return Model{}, Format_Error(2)
 		}
 
 		out_features, ok = endian.get_u32(buf[4:8], .Little)
 		if !ok {
-			return nil, Format_Error(3)
+			return Model{}, Format_Error(3)
 		}
 
 		activation := buf[8]
 
-		model[i].weights.rows = int(inp_features)
-		model[i].weights.cols = int(out_features)
-		model[i].activation = Activation(activation)
+		model.layers[i].weights.rows = int(inp_features)
+		model.layers[i].weights.cols = int(out_features)
+		model.layers[i].activation = Activation(activation)
 
 		weights_len := int(inp_features * out_features) * size_of(f64)
 		weights_buf := make([]byte, weights_len)
 		read := os.read_full(f, weights_buf) or_return
 		if read != weights_len {
-			return nil, File_Too_Short(0)
+			return Model{}, File_Too_Short(0)
 		}
 
-		model[i].weights.data = slice.reinterpret([]f64, weights_buf)
+		model.layers[i].weights.data = slice.reinterpret([]f64, weights_buf)
 
 		biases_len := int(out_features) * size_of(f64)
 		biases_buf := make([]byte, biases_len)
 		read = os.read_full(f, biases_buf) or_return
 		if read != biases_len {
-			return nil, File_Too_Short(1)
+			return Model{}, File_Too_Short(1)
 		}
 
-		model[i].biases = slice.reinterpret([]f64, biases_buf)
+		model.layers[i].biases = slice.reinterpret([]f64, biases_buf)
 	}
 
 	return model, nil

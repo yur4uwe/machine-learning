@@ -34,9 +34,9 @@ layer_init :: proc(
 	switch ini_type {
 	case .Auto:
 		switch act {
-		case .ReLU:
+		case .ReLU, .LeakyReLU:
 			limit = math.sqrt(6.0 / f64(in_feat))
-		case .Softmax, .None:
+		case .Softmax, .None, .Sigmoid, .Tanh:
 			limit = math.sqrt(6.0 / f64(in_feat + out_feat))
 		}
 	case .Kaiming:

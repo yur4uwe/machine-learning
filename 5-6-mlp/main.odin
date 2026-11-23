@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:math/rand"
+import "core:os"
 import mlp "libmlp"
 
 main :: proc() {
@@ -11,11 +12,22 @@ main :: proc() {
 		cols = 2,
 	}
 
-	xor_targets := []i32{0, 1, 1, 0}
+	xor_targets := mlp.Matrix {
+		data = []f64{0, 1, 1, 0},
+		rows = 4,
+		cols = 1,
+	}
 
+	// 142
 	rand.reset(420)
 
-	model := mlp.Model{mlp.layer_init(2, 8, .ReLU), mlp.layer_init(8, 2, .Softmax)}
+	model := mlp.Model {
+		layers = make([dynamic]mlp.Layer),
+		loss   = .BCE,
+	}
+	defer delete(model.layers)
+	append(&model.layers, mlp.layer_init(2, 8, .ReLU))
+	append(&model.layers, mlp.layer_init(8, 1, .Sigmoid))
 
 	learning_rate := 0.4
 	training_steps := 500
@@ -23,7 +35,7 @@ main :: proc() {
 	for step in 1 ..= training_steps {
 		probs := mlp.model_forward(model, xor_dataset)
 
-		loss = mlp.cross_entropy_loss(probs, xor_targets)
+		loss = mlp.compute_model_loss(model.loss, probs, xor_targets)
 		if step % 100 == 0 {
 			fmt.printfln("step %d: loss: %f", step, loss)
 			fmt.print("Predictions:\n[")
@@ -53,9 +65,9 @@ main :: proc() {
 	// if err != nil {
 	// 	fmt.eprintln(err)
 	// }
-
-	// mlp.save_model(model, f)
 	//
+	// mlp.save_model(model, f)
+
 	// f, err := os.open("test.mlp1")
 	// if err != nil {
 	// 	fmt.eprintln(err)
