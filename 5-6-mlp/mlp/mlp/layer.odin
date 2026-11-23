@@ -37,23 +37,7 @@ layer_forward :: proc(prev: Matrix, curr: ^Layer) -> Matrix {
 		curr.result.shape = {prev.shape.row_cnt, curr.weights.shape.col_cnt}
 	}
 
-	samples_cnt := prev.shape.row_cnt
-	neurons_cnt := curr.weights.shape.col_cnt
-	in_feat_cnt := prev.shape.col_cnt
+	matmul(prev, curr.weights, curr.biases, curr.result)
 
-	for sample_idx in 0 ..< samples_cnt {
-		for neuron_idx in 0 ..< neurons_cnt {
-			agg := curr.biases[neuron_idx]
-			for feat_idx in 0 ..< in_feat_cnt {
-				first_el := prev.data[sample_idx * stride(prev) + feat_idx]
-				sec_el := curr.weights.data[feat_idx * stride(curr.weights) + neuron_idx]
-				agg += first_el * sec_el
-			}
-
-			curr.result.data[sample_idx * stride(curr.result) + neuron_idx] = agg
-		}
-	}
-
-	// activation MUST be non-nil anyway
 	return layer_activation(curr.activation, curr.result)
 }

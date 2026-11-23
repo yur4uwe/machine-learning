@@ -46,16 +46,27 @@ el_update :: proc(m: ^Matrix, row_idx: int, col_idx: int, v: f64) -> bool {
 	return true
 }
 
-stride :: #force_inline proc(m: Matrix) -> int {
+stride :: #force_inline proc "contextless" (m: Matrix) -> int {
 	return m.shape.col_cnt
 }
 
-matmul :: proc(lhs: Matrix, rhs: Matrix, bias: []f64 = nil) -> (Matrix, bool) {
-	// 1 0
-	// 0 1 * 1 0 0 0
-	// 0 0   0 1 0 1
-	// 1 1
-	if lhs.shape.col_cnt != rhs.shape.row_cnt {
+matmul_dst :: proc(
+	lhs, rhs: Matrix,
+	bias: []f64 = nil,
+	dst: Matrix,
+	scale: f64 = 1.0,
+	transpose_lhs: bool = false,
+	transpose_rhs: bool = false,
+) {
+
+	lhs_rows := transpose_lhs ? lhs.shape.col_cnt : lhs.shape.row_cnt
+	lhs_cols := transpose_lhs ? lhs.shape.row_cnt : lhs.shape.col_cnt
+
+	rhs_rows := transpose_rhs ? rhs.shape.col_cnt : rhs.shape.row_cnt
+	rhs_cols := transpose_rhs ? rhs.shape.row_cnt : rhs.shape.col_cnt
+
+
+	if lhs_cols != rhs_rows {
 		fmt.printfln(
 			"matrix shapes diverge: lhs %d*%d, rhs %d*%d",
 			lhs.shape.row_cnt,
@@ -63,30 +74,45 @@ matmul :: proc(lhs: Matrix, rhs: Matrix, bias: []f64 = nil) -> (Matrix, bool) {
 			rhs.shape.row_cnt,
 			rhs.shape.col_cnt,
 		)
-		return Matrix{}, false
+		return
 	}
 
-	data_size := lhs.shape.row_cnt * rhs.shape.col_cnt
+	for i in 0 ..< lhs_rows {
+		for j in 0 ..< rhs_cols {
+			agg := len(bias) > 0 ? bias[j] : 0.0
+			for k in 0 ..< lhs_cols {
+				lhs_el_idx := transpose_lhs ? k * stride(lhs) + i : i * stride(lhs) + k
+				first_el := lhs.data[lhs_el_idx]
 
-	data, err := make([]f64, data_size)
-	if err != nil {
-		return Matrix{}, false
-	}
-
-	m := Matrix{data, {lhs.shape.row_cnt, rhs.shape.col_cnt}}
-
-	for i in 0 ..< lhs.shape.row_cnt {
-		for j in 0 ..< rhs.shape.col_cnt {
-			agg := 0.0
-			for k in 0 ..< lhs.shape.col_cnt {
-				first_el := lhs.data[i * stride(lhs) + k]
-				sec_el := rhs.data[k * stride(rhs) + j]
+				rhs_el_idx := transpose_rhs ? j * stride(rhs) + k : k * stride(rhs) + j
+				sec_el := rhs.data[rhs_el_idx]
 				agg += first_el * sec_el
 			}
 
-			m.data[i * stride(m) + j] = agg
+			dst.data[i * stride(dst) + j] = agg * scale
 		}
 	}
+}
 
-	return m, true
+
+matmul_ret :: proc(
+	lhs, rhs: Matrix,
+	bias: []f64 = nil,
+	scale: f64 = 1.0,
+	transpose_lhs: bool = false,
+	transpose_rhs: bool = false,
+) -> Matrix {
+	data_size := lhs.shape.row_cnt * rhs.shape.col_cnt
+	data := make([]f64, data_size)
+
+	m := Matrix{data, {lhs.shape.row_cnt, rhs.shape.col_cnt}}
+
+	matmul_dst(lhs, rhs, bias, m, scale, transpose_lhs, transpose_rhs)
+
+	return m
+}
+
+matmul :: proc {
+	matmul_ret,
+	matmul_dst,
 }

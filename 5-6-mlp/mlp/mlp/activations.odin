@@ -9,18 +9,18 @@ Activation :: enum {
 	Softmax,
 }
 
-relu :: proc(m: Matrix) -> Matrix {
+relu :: proc "contextless" (m: Matrix) -> Matrix {
 	for &x in m.data {
 		x = max(0.0, x)
 	}
 	return m
 }
 
-drelu :: proc(v: f64) -> f64 {
+drelu :: proc "contextless" (v: f64) -> f64 {
 	return v > 0.0 ? 1.0 : 0.0
 }
 
-softmax :: proc(m: Matrix) -> Matrix {
+softmax :: proc "contextless" (m: Matrix) -> Matrix {
 	for i in 0 ..< m.shape.row_cnt {
 		// use a numeric trick where:
 		// exp(xi - C) / sum(exp(xj - C)) == exp(xi) / sum(exp(xj))
@@ -42,7 +42,7 @@ softmax :: proc(m: Matrix) -> Matrix {
 	return m
 }
 
-layer_activation :: proc(typ: Activation, m: Matrix) -> Matrix {
+layer_activation :: proc "contextless" (typ: Activation, m: Matrix) -> Matrix {
 	switch typ {
 	case .ReLU:
 		return relu(m)
@@ -55,7 +55,7 @@ layer_activation :: proc(typ: Activation, m: Matrix) -> Matrix {
 	}
 }
 
-layer_activation_deriv :: proc(typ: Activation, v: f64) -> f64 {
+layer_activation_deriv :: proc "contextless" (typ: Activation, v: f64) -> f64 {
 	switch typ {
 	case .ReLU:
 		return drelu(v)

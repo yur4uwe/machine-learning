@@ -15,7 +15,7 @@ model_forward :: proc(m: Model, input: Matrix) -> Matrix {
 	return prev
 }
 
-cross_entropy_loss :: proc(probs: Matrix, targets: []int) -> f64 {
+cross_entropy_loss :: proc "contextless" (probs: Matrix, targets: []int) -> f64 {
 	eps := 1e-15
 	n := f64(probs.shape.row_cnt)
 	sum := 0.0
@@ -83,18 +83,7 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []int) {
 		// Weight gradient calculation X^T * delta
 		// X is (Sample, Feature) and X^T is (Feature, Sample)
 		// delta is (Sample, Class)
-		for feature in 0 ..< in_feat_cnt {
-			for class in 0 ..< out_feat_cnt {
-				sum := 0.0
-				for sample in 0 ..< sample_cnt {
-					incoming_signal := prev_res.data[sample * stride(prev_res) + feature]
-					outgoing_error := errors.data[sample * stride(errors) + class]
-					sum += incoming_signal * outgoing_error
-				}
-
-				grad_w.data[feature * stride(grad_w) + class] = sum / f64(sample_cnt)
-			}
-		}
+		matmul(prev_res, errors, dst = grad_w, scale = 1.0 / f64(sample_cnt), transpose_lhs = true)
 
 		grad_b := make([]f64, out_feat_cnt)
 
@@ -125,22 +114,11 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []int) {
 		// Backprop error: delta * W^T
 		// W is (Features, Class) and W^T is (Class, Features)
 		// delta is still (Sample, Class)
-		for sample in 0 ..< sample_cnt {
-			for feature in 0 ..< in_feat_cnt {
-				sum := 0.0
-				for class in 0 ..< out_feat_cnt {
-					err_from_neuron := errors.data[sample * stride(errors) + class]
-					weight_to_neuron :=
-						curr_l.weights.data[feature * stride(curr_l.weights) + class]
-					sum += err_from_neuron * weight_to_neuron
-				}
+		matmul(errors, curr_l.weights, dst = prev_errors, transpose_rhs = true)
 
-				prev_activation := model[l - 1].activation
-
-				idx := sample * stride(prev_errors) + feature
-				prev_errors.data[idx] =
-					sum * layer_activation_deriv(prev_activation, prev_res.data[idx])
-			}
+		prev_activation := model[l - 1].activation
+		for i in 0 ..< len(prev_errors.data) {
+			prev_errors.data[i] *= layer_activation_deriv(prev_activation, prev_res.data[i])
 		}
 
 		errors = prev_errors
