@@ -34,22 +34,6 @@ def set_rng_seed(seed: int):
     lib.set_seed(seed)
 
 
-def cce(preds: np.ndarray, actual: np.ndarray) -> float:
-    preds = np.ascontiguousarray(preds, dtype=np.float64)
-    if actual.ndim == 1:
-        if preds.shape[1] > 1:
-            actual = np.eye(preds.shape[1], dtype=np.float64)[actual]
-        else:
-            actual = actual.reshape(-1, 1).astype(np.float64)
-    else:
-        actual = np.ascontiguousarray(actual, dtype=np.float64)
-    preds_c = preds.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-    actual_c = actual.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-    return lib.CCE_ffi(
-        preds_c, preds.shape[0], preds.shape[1], actual_c, actual.shape[1]
-    )
-
-
 @dataclass
 class DenseLayer:
     inp_features: int
@@ -61,6 +45,7 @@ class DenseLayer:
 class MLP:
     def __init__(self, loss: Loss, *layers: DenseLayer):
         self._handle = lib.model_create(int(loss))
+        self._loss = loss
         for layer in layers:
             lib.model_add_layer(
                 self._handle,
@@ -83,9 +68,7 @@ class MLP:
 
         X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         y_c = y.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        return lib.model_train_step(
-            self._handle, X_c, X.shape[0], X.shape[1], y_c, y.shape[1], lr
-        )
+        return lib.model_train_step(self._handle, X_c, X.shape[0], X.shape[1], y_c, lr)
 
     def forward(self, X: np.ndarray) -> np.ndarray:
         out = np.empty((X.shape[0], self._out_dim), dtype=np.float64)
@@ -94,6 +77,45 @@ class MLP:
         out_c = out.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         lib.model_forward_ffi(self._handle, X_c, X.shape[0], X.shape[1], out_c)
         return out
+
+    def evaluate(self, X: np.ndarray, y: np.ndarray) -> float:
+        X = np.ascontiguousarray(X, dtype=np.float64)
+        if y.ndim == 1:
+            if self._out_dim > 1:
+                y = np.eye(self._out_dim, dtype=np.float64)[y]
+            else:
+                y = y.reshape(-1, 1).astype(np.float64)
+        else:
+            y = np.ascontiguousarray(y, dtype=np.float64)
+
+        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        y_c = y.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        return lib.model_evaluate(self._handle, X_c, X.shape[0], X.shape[1], y_c)
+
+    @property
+    def num_layers(self) -> int:
+        return lib.model_num_layers(self._handle)
+
+    def get_layer_parameters(self, layer_idx: int) -> tuple[np.ndarray, np.ndarray]:
+        if layer_idx < 0 or layer_idx >= self.num_layers:
+            raise IndexError(f"Layer index {layer_idx} out of range [0, {self.num_layers})")
+
+        in_feat = ctypes.c_uint32()
+        out_feat = ctypes.c_uint32()
+        lib.model_layer_dims(
+            self._handle,
+            layer_idx,
+            ctypes.byref(in_feat),
+            ctypes.byref(out_feat),
+        )
+
+        w = np.empty((in_feat.value, out_feat.value), dtype=np.float64)
+        b = np.empty((out_feat.value,), dtype=np.float64)
+
+        w_c = w.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        b_c = b.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        lib.model_get_layer_params(self._handle, layer_idx, w_c, b_c)
+        return w, b
 
     @property
     def _out_dim(self) -> int:

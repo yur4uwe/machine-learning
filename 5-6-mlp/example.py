@@ -1,5 +1,5 @@
 import numpy as np
-from libmlp import MLP, Activation, DenseLayer, Loss, cce, set_rng_seed
+from libmlp import MLP, Activation, DenseLayer, Loss, set_rng_seed
 
 BAD_SEED = 142
 GOOD_SEED = 420
@@ -20,7 +20,7 @@ if __name__ == "__main__":
     print("Initial Predictions:")
     initial_preds = model.forward(X)
     print(np.round(initial_preds, 4))
-    print(f"Initial Cross-Entropy Loss: {cce(initial_preds, y):.4f}\n")
+    print(f"Initial Cross-Entropy Loss: {model.evaluate(X, y):.4f}\n")
 
     learning_rate = 0.2
     epochs = 500
@@ -38,4 +38,4 @@ if __name__ == "__main__":
 
     predicted_classes = np.argmax(final_preds, axis=1)
     print(f"Predicted Classes: {predicted_classes.tolist()} (Expected: {y.tolist()})")
-    print(f"Final Cross-Entropy Loss: {cce(final_preds, y):.4f}")
+    print(f"Final Cross-Entropy Loss: {model.evaluate(X, y):.4f}")

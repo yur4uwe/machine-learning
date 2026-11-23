@@ -3,7 +3,6 @@ package mlp
 import "base:runtime"
 import "core:math/rand"
 import "core:mem"
-import "core:slice"
 
 @(export)
 set_seed :: proc "c" (seed: u64) {
@@ -31,21 +30,6 @@ model_forward_ffi :: proc "c" (
 }
 
 @(export)
-CCE_ffi :: proc "c" (x_data: [^]f64, rows, cols: u32, actual: [^]f64, y_cols: u32) -> f64 {
-	input := Matrix {
-		data = x_data[:rows * cols],
-		rows = int(rows),
-		cols = int(cols),
-	}
-	targets := Matrix {
-		data = actual[:rows * y_cols],
-		rows = int(rows),
-		cols = int(y_cols),
-	}
-	return compute_model_loss(.CCE, input, targets)
-}
-
-@(export)
 model_output_dim :: proc "c" (handle: rawptr) -> u32 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
@@ -54,12 +38,36 @@ model_output_dim :: proc "c" (handle: rawptr) -> u32 {
 }
 
 @(export)
+model_evaluate :: proc "c" (
+	handle: rawptr,
+	x_data: [^]f64,
+	rows, cols: u32,
+	y_data: [^]f64,
+) -> f64 {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	input := Matrix {
+		data = x_data[:rows * cols],
+		rows = int(rows),
+		cols = int(cols),
+	}
+	out_dim := m.layers[len(m.layers) - 1].weights.cols
+	targets := Matrix {
+		data = y_data[:int(rows) * out_dim],
+		rows = int(rows),
+		cols = out_dim,
+	}
+
+	probs := model_forward(m^, input)
+	return compute_model_loss(m.loss, probs, targets)
+}
+
+@(export)
 model_train_step :: proc "c" (
 	handle: rawptr,
 	x_data: [^]f64,
 	rows, cols: u32,
 	y_data: [^]f64,
-	y_cols: u32,
 	lr: f64,
 ) -> f64 {
 	context = runtime.default_context()
@@ -69,10 +77,11 @@ model_train_step :: proc "c" (
 		rows = int(rows),
 		cols = int(cols),
 	}
+	out_dim := m.layers[len(m.layers) - 1].weights.cols
 	targets := Matrix {
-		data = y_data[:rows * y_cols],
+		data = y_data[:int(rows) * out_dim],
 		rows = int(rows),
-		cols = int(y_cols),
+		cols = out_dim,
 	}
 
 	probs := model_forward(m^, input)
@@ -82,6 +91,30 @@ model_train_step :: proc "c" (
 	return loss
 }
 
+@(export)
+model_num_layers :: proc "c" (handle: rawptr) -> u32 {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	return u32(len(m.layers))
+}
+
+@(export)
+model_layer_dims :: proc "c" (handle: rawptr, layer_idx: u32, in_feat, out_feat: ^u32) {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	in_feat^ = u32(m.layers[layer_idx].weights.rows)
+	out_feat^ = u32(m.layers[layer_idx].weights.cols)
+}
+
+@(export)
+model_get_layer_params :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^]f64, dst_b: [^]f64) {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	w := m.layers[layer_idx].weights.data
+	b := m.layers[layer_idx].biases
+	mem.copy(dst_w, raw_data(w), len(w) * size_of(f64))
+	mem.copy(dst_b, raw_data(b), len(b) * size_of(f64))
+}
 
 @(export)
 model_get_weights :: proc "c" (handle: rawptr, layer_idx: u32, dst: [^]f64) {
