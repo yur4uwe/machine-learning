@@ -13,6 +13,14 @@ class Activation(IntEnum):
     SOFTMAX = 2
 
 
+class LayerInit(IntEnum):
+    AUTO = 0
+    ZEROS = 1
+    UNIFORM = 2
+    KAIMING = 3
+    XAVIER = 4
+
+
 def set_rng_seed(seed: int):
     lib.set_seed(seed)
 
@@ -30,6 +38,7 @@ class DenseLayer:
     inp_features: int
     out_features: int
     activation: Activation
+    init_method: LayerInit = LayerInit.AUTO
 
 
 class MLP:
@@ -37,7 +46,11 @@ class MLP:
         self._handle = lib.model_create()
         for layer in layers:
             lib.model_add_layer(
-                self._handle, layer.inp_features, layer.out_features, layer.activation
+                self._handle,
+                layer.inp_features,
+                layer.out_features,
+                layer.activation,
+                layer.init_method,
             )
 
     def train_step(self, X: np.ndarray, y: np.ndarray, lr: float) -> float:

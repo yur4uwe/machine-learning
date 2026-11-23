@@ -8,44 +8,20 @@ Matrix :: struct {
 	cols: int,
 }
 
-major_access :: proc(m: ^Matrix, row_idx: int) -> ([]f64, bool) {
-	if m.rows < row_idx {
-		return nil, false
-	}
-	row_start := m.cols * row_idx
-	row_end := row_start + m.cols
-	return m.data[row_start:row_end], true
-}
-
-minor_access :: proc()
-
-el_access :: proc(m: ^Matrix, row_idx: int, col_idx: int) -> (f64, bool) {
-	if m.rows <= row_idx || m.cols <= col_idx {
-		return 0.0, false
-	}
-
-	act_idx := m.cols * row_idx + col_idx
-
-	fmt.printfln("access at: [%d][%d] with flattened %d", row_idx, col_idx, act_idx)
-
-	return m.data[act_idx], true
-}
-
-el_update :: proc(m: ^Matrix, row_idx: int, col_idx: int, v: f64) -> bool {
-	if m.rows <= row_idx || m.cols <= col_idx {
-		return false
-	}
-
-	act_idx := m.cols * row_idx + col_idx
-
-	fmt.printfln("update at: [%d][%d] with flattened %d", row_idx, col_idx, act_idx)
-
-	m.data[act_idx] = v
-	return true
-}
-
 stride :: #force_inline proc "contextless" (m: Matrix) -> int {
 	return m.cols
+}
+
+mat_full_copy :: proc(m: Matrix) -> Matrix {
+	data := make([]f64, len(m.data))
+	copy(data, m.data)
+	matr := Matrix {
+		data = data,
+		rows = m.rows,
+		cols = m.cols,
+	}
+
+	return matr
 }
 
 matmul_dst :: proc(

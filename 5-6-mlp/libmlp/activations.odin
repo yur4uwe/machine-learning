@@ -9,18 +9,21 @@ Activation :: enum {
 	Softmax,
 }
 
-relu :: proc "contextless" (m: Matrix) -> Matrix {
+relu :: proc "contextless" (m: Matrix) {
 	for &x in m.data {
 		x = max(0.0, x)
 	}
-	return m
 }
 
-drelu :: proc "contextless" (v: f64) -> f64 {
-	return v > 0.0 ? 1.0 : 0.0
+drelu :: proc "contextless" (z: Matrix, grad: Matrix) {
+	for i in 0 ..< len(grad.data) {
+		if z.data[i] <= 0.0 {
+			grad.data[i] = 0.0
+		}
+	}
 }
 
-softmax :: proc "contextless" (m: Matrix) -> Matrix {
+softmax :: proc "contextless" (m: Matrix) {
 	for i in 0 ..< m.rows {
 		// use a numeric trick where:
 		// exp(xi - C) / sum(exp(xj - C)) == exp(xi) / sum(exp(xj))
@@ -39,31 +42,26 @@ softmax :: proc "contextless" (m: Matrix) -> Matrix {
 			val /= sum
 		}
 	}
-	return m
 }
 
-layer_activation :: proc "contextless" (typ: Activation, m: Matrix) -> Matrix {
+layer_activation :: proc "contextless" (typ: Activation, m: Matrix) {
 	switch typ {
 	case .ReLU:
-		return relu(m)
+		relu(m)
 	case .Softmax:
-		return softmax(m)
+		softmax(m)
 	case .None:
 		fallthrough
 	case:
-		return m
 	}
 }
 
-layer_activation_deriv :: proc "contextless" (typ: Activation, v: f64) -> f64 {
+layer_activation_deriv :: proc "contextless" (typ: Activation, z: Matrix, grad: Matrix) {
 	switch typ {
 	case .ReLU:
-		return drelu(v)
-	case .Softmax:
-		fallthrough
-	case .None:
+		drelu(z, grad)
+	case .Softmax, .None:
 		fallthrough
 	case:
-		return 1.0
 	}
 }

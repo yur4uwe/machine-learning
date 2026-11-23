@@ -1,7 +1,6 @@
 package mlp
 
 import "core:fmt"
-import "core:math"
 
 Model :: []Layer
 
@@ -15,17 +14,6 @@ model_forward :: proc(m: Model, input: Matrix) -> Matrix {
 	return prev
 }
 
-cross_entropy_loss :: proc "contextless" (probs: Matrix, targets: []i32) -> f64 {
-	eps := 1e-15
-	n := f64(probs.rows)
-	sum := 0.0
-	for i in 0 ..< probs.rows {
-		idx := i * stride(probs) + int(targets[i])
-		prob := clamp(probs.data[idx], eps, 1.0 - eps)
-		sum += math.ln(prob)
-	}
-	return (-1 / n) * sum
-}
 
 model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
 	// On all layers: rows are sample counts
@@ -68,7 +56,7 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
 		curr_l := &model[l]
 		prev_res: Matrix
 		if l > 0 {
-			prev_res = model[l - 1].result
+			prev_res = model[l - 1].post_act
 		} else {
 			prev_res = input
 		}
@@ -120,9 +108,8 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: []i32) {
 		matmul(errors, curr_l.weights, dst = prev_errors, transpose_rhs = true)
 
 		prev_activation := model[l - 1].activation
-		for i in 0 ..< len(prev_errors.data) {
-			prev_errors.data[i] *= layer_activation_deriv(prev_activation, prev_res.data[i])
-		}
+		prev_z := model[l - 1].pre_act
+		layer_activation_deriv(prev_activation, prev_z, prev_errors)
 
 		errors = prev_errors
 

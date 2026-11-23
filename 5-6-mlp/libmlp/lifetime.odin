@@ -9,10 +9,10 @@ model_create :: proc "c" () -> rawptr {
 }
 
 @(export)
-model_add_layer :: proc "c" (handle: rawptr, in_feat, out_feat: u32, act: u32) {
+model_add_layer :: proc "c" (handle: rawptr, in_feat, out_feat: u32, act: u8, init: u8) {
 	context = runtime.default_context()
 	m := (^[dynamic]Layer)(handle)
-	append(m, he_init(int(in_feat), int(out_feat), Activation(act)))
+	append(m, layer_init(int(in_feat), int(out_feat), Activation(act), Init_Method(init)))
 }
 
 @(export)
@@ -22,7 +22,8 @@ model_destroy :: proc "c" (handle: rawptr) {
 	for &l in m {
 		delete(l.weights.data)
 		delete(l.biases)
-		delete(l.result.data)
+		delete(l.pre_act.data)
+		delete(l.post_act.data)
 		delete(l.weight_grad.data)
 		delete(l.bias_grad)
 	}

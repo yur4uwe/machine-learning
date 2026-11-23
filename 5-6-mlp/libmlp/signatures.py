@@ -13,7 +13,8 @@ lib.model_add_layer.argtypes = [
     ctypes.c_void_p,
     ctypes.c_uint32,
     ctypes.c_uint32,
-    ctypes.c_uint32,
+    ctypes.c_uint8,
+    ctypes.c_uint8,
 ]
 
 lib.model_output_dim.argtypes = [ctypes.c_void_p]
