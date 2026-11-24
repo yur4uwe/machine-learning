@@ -1,9 +1,9 @@
 package mlp
 
-import "core:os"
 import "base:runtime"
 import "core:math/rand"
 import "core:mem"
+import "core:os"
 
 @(export)
 set_seed :: proc "c" (seed: u64) {
@@ -11,31 +11,22 @@ set_seed :: proc "c" (seed: u64) {
 	rand.reset(seed)
 }
 
+// -----------------------------------------------------------------------------
+// Execution & Training
+// -----------------------------------------------------------------------------
+
 @(export)
 model_forward_ffi :: proc "c" (
 	handle: rawptr,
 	x_data: [^]f64,
 	rows, cols: u32,
-	out_probs: [^]f64, // NumPy pre-allocated buffer
+	out_probs: [^]f64,
 ) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
-	input := Matrix {
-		data = x_data[:rows * cols],
-		rows = int(rows),
-		cols = int(cols),
-	}
-
+	input := Matrix{data = x_data[:rows * cols], rows = int(rows), cols = int(cols)}
 	probs := model_forward(m^, input)
 	mem.copy(out_probs, raw_data(probs.data), len(probs.data) * size_of(f64))
-}
-
-@(export)
-model_output_dim :: proc "c" (handle: rawptr) -> u32 {
-	context = runtime.default_context()
-	m := (^Model)(handle)
-	if len(m.layers) == 0 do return 0
-	return u32(m.layers[len(m.layers) - 1].weights.cols)
 }
 
 @(export)
@@ -47,20 +38,16 @@ model_evaluate :: proc "c" (
 ) -> f64 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
-	input := Matrix {
-		data = x_data[:rows * cols],
-		rows = int(rows),
-		cols = int(cols),
-	}
 	out_dim := m.layers[len(m.layers) - 1].weights.cols
-	targets := Matrix {
-		data = y_data[:int(rows) * out_dim],
-		rows = int(rows),
-		cols = out_dim,
-	}
+	input := Matrix{data = x_data[:rows * cols], rows = int(rows), cols = int(cols)}
+	targets := Matrix{data = y_data[:int(rows) * out_dim], rows = int(rows), cols = out_dim}
+
+	old_training := m.is_training
+	m.is_training = false
+	defer m.is_training = old_training
 
 	probs := model_forward(m^, input)
-	return compute_model_loss(m.loss, probs, targets)
+	return compute_model_loss(m^, probs, targets)
 }
 
 @(export)
@@ -73,30 +60,69 @@ model_train_step :: proc "c" (
 ) -> f64 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
-	input := Matrix {
-		data = x_data[:rows * cols],
-		rows = int(rows),
-		cols = int(cols),
-	}
 	out_dim := m.layers[len(m.layers) - 1].weights.cols
-	targets := Matrix {
-		data = y_data[:int(rows) * out_dim],
-		rows = int(rows),
-		cols = out_dim,
-	}
+	input := Matrix{data = x_data[:rows * cols], rows = int(rows), cols = int(cols)}
+	targets := Matrix{data = y_data[:int(rows) * out_dim], rows = int(rows), cols = out_dim}
+
+	old_training := m.is_training
+	m.is_training = true
+	defer m.is_training = old_training
 
 	probs := model_forward(m^, input)
-	loss := compute_model_loss(m.loss, probs, targets)
+	loss := compute_model_loss(m^, probs, targets)
 	model_backward(m^, input, probs, targets)
 	model_optimizer(m^, lr)
 	return loss
 }
 
 @(export)
+model_set_training :: proc "c" (handle: rawptr, training: bool) {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	m.is_training = training
+}
+
+@(export)
+model_is_training :: proc "c" (handle: rawptr) -> bool {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	return m.is_training
+}
+
+// -----------------------------------------------------------------------------
+// Diagnostics
+// -----------------------------------------------------------------------------
+
+@(export)
+model_get_dead_neurons :: proc "c" (
+	handle: rawptr,
+	x_data: [^]f64,
+	rows, cols: u32,
+	layer_idx: i32,
+) -> f64 {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	input := Matrix{data = x_data[:rows * cols], rows = int(rows), cols = int(cols)}
+	return model_dead_neurons(m^, input, layer_idx)
+}
+
+// -----------------------------------------------------------------------------
+// Architecture & Layer Data
+// -----------------------------------------------------------------------------
+
+@(export)
 model_num_layers :: proc "c" (handle: rawptr) -> u32 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	return u32(len(m.layers))
+}
+
+@(export)
+model_output_dim :: proc "c" (handle: rawptr) -> u32 {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	if len(m.layers) == 0 do return 0
+	return u32(m.layers[len(m.layers) - 1].weights.cols)
 }
 
 @(export)
@@ -118,21 +144,88 @@ model_get_layer_params :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^]f6
 }
 
 @(export)
-model_get_weights :: proc "c" (handle: rawptr, layer_idx: u32, dst: [^]f64) {
+model_set_layer_params :: proc "c" (handle: rawptr, layer_idx: u32, src_w: [^]f64, src_b: [^]f64) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
+	if int(layer_idx) >= len(m.layers) do return
 	w := m.layers[layer_idx].weights.data
-	mem.copy(dst, raw_data(w), len(w) * size_of(f64))
+	b := m.layers[layer_idx].biases
+	if len(w) > 0 && src_w != nil do mem.copy(raw_data(w), src_w, len(w) * size_of(f64))
+	if len(b) > 0 && src_b != nil do mem.copy(raw_data(b), src_b, len(b) * size_of(f64))
 }
+
+@(export)
+model_get_layer_gradients :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^]f64, dst_b: [^]f64) {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	if int(layer_idx) >= len(m.layers) do return
+	w_grad := m.layers[layer_idx].weight_grad.data
+	b_grad := m.layers[layer_idx].bias_grad
+	if len(w_grad) > 0 && dst_w != nil do mem.copy(dst_w, raw_data(w_grad), len(w_grad) * size_of(f64))
+	if len(b_grad) > 0 && dst_b != nil do mem.copy(dst_b, raw_data(b_grad), len(b_grad) * size_of(f64))
+}
+
+// -----------------------------------------------------------------------------
+// Hyperparameters
+// -----------------------------------------------------------------------------
+
+@(export)
+model_get_hyperparam :: proc "c" (handle: rawptr, param: u8) -> f64 {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	switch Model_Hyperparam(param) {
+	case .L1:          return m.l1
+	case .L2:          return m.l2
+	case .Grad_Clip:   return m.grad_clip
+	case .Weight_Clip: return m.weight_clip
+	case:              return 0.0
+	}
+}
+
+@(export)
+model_set_hyperparam :: proc "c" (handle: rawptr, param: u8, val: f64) {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	switch Model_Hyperparam(param) {
+	case .L1:          m.l1 = val
+	case .L2:          m.l2 = val
+	case .Grad_Clip:   m.grad_clip = val
+	case .Weight_Clip: m.weight_clip = val
+	}
+}
+
+@(export)
+model_get_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8) -> f64 {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	if int(layer_idx) >= len(m.layers) do return 0.0
+	switch Layer_Param(param) {
+	case .Dropout: return m.layers[layer_idx].dropout_rate
+	case:          return 0.0
+	}
+}
+
+@(export)
+model_set_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8, val: f64) {
+	context = runtime.default_context()
+	m := (^Model)(handle)
+	if int(layer_idx) >= len(m.layers) do return
+	switch Layer_Param(param) {
+	case .Dropout: m.layers[layer_idx].dropout_rate = val
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Persistence
+// -----------------------------------------------------------------------------
 
 @(export)
 model_save_params :: proc "c" (handle: rawptr, path: cstring) -> bool {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	f, err := os.open(string(path), flags={.Write, .Create})
-	if err != nil {
-		return false
-	}
+	if err != nil do return false
+	defer os.close(f)
 	save_model(m^, f)
 	return true
 }
@@ -141,16 +234,12 @@ model_save_params :: proc "c" (handle: rawptr, path: cstring) -> bool {
 model_load_params :: proc "c" (path: cstring) -> rawptr {
 	context = runtime.default_context()
 	f, file_err := os.open(string(path))
-	if file_err != nil {
-		return nil
-	}
+	if file_err != nil do return nil
+	defer os.close(f)
 	model, err := load_model(f)
-	if err != nil {
-		return nil
-	}
+	if err != nil do return nil
 
 	handle := new(Model)
 	handle^ = model
-
 	return handle
 }

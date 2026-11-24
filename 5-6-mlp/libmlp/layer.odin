@@ -7,11 +7,17 @@ import "core:math/rand"
 Layer :: struct {
 	weights:     Matrix,
 	biases:      []f64,
-	pre_act:     Matrix,
-	post_act:    Matrix,
 	activation:  Activation,
+	init_method: Init_Method,
+
+	pre_act:  Matrix,
+	post_act: Matrix,
+
 	weight_grad: Matrix,
 	bias_grad:   []f64,
+
+    dropout_rate: f64,
+    dropout_mask: Matrix,
 }
 
 Init_Method :: enum {
@@ -58,7 +64,7 @@ layer_init :: proc(
 	w := Matrix{weights, in_feat, out_feat}
 	b := make([]f64, out_feat)
 
-	return Layer{weights = w, biases = b, activation = act}
+	return Layer{weights = w, biases = b, activation = act, init_method = ini_type}
 }
 
 he_init :: proc(in_feat: int, out_feat: int, act: Activation) -> Layer {
@@ -71,7 +77,7 @@ he_init :: proc(in_feat: int, out_feat: int, act: Activation) -> Layer {
 	m := Matrix{weights, in_feat, out_feat}
 
 	bias := make([]f64, out_feat)
-	return Layer{weights = m, biases = bias, activation = act}
+	return Layer{weights = m, biases = bias, activation = act, init_method = .Kaiming}
 }
 
 layer_forward :: proc(prev: Matrix, curr: ^Layer) -> Matrix {
@@ -96,4 +102,27 @@ layer_forward :: proc(prev: Matrix, curr: ^Layer) -> Matrix {
 	layer_activation(curr.activation, curr.post_act)
 
 	return curr.post_act
+}
+
+layer_forward_train :: proc(prev: Matrix, curr: ^Layer) -> Matrix {
+    post_act := layer_forward(prev, curr)
+    if curr.dropout_rate <= 0.0 {
+        return post_act
+    }
+
+    data_size := len(curr.post_act.data)
+    if len(curr.dropout_mask.data) != data_size {
+        delete(curr.dropout_mask.data)
+        curr.dropout_mask.data = make([]f64, data_size)
+        curr.dropout_mask.rows = curr.post_act.rows
+        curr.dropout_mask.cols = curr.post_act.cols
+    }
+
+    scale := 1.0 / (1.0 - curr.dropout_rate)
+    for &m, i in curr.dropout_mask.data {
+        m = rand.float64() >= curr.dropout_rate ? scale : 0.0
+        curr.post_act.data[i] *= m
+    }
+
+    return post_act
 }

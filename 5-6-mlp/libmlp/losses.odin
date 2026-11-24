@@ -72,17 +72,39 @@ mse_loss_deriv :: proc "contextless" (preds, targets, errors: Matrix) {
 	}
 }
 
-compute_model_loss :: proc "contextless" (loss: Loss, preds, targets: Matrix) -> f64 {
-	switch loss {
+compute_model_loss :: proc "contextless" (model: Model, preds, targets: Matrix) -> f64 {
+    loss: f64
+	switch model.loss {
 	case .CCE:
-		return cce_loss(preds, targets)
+		loss = cce_loss(preds, targets)
 	case .MSE:
-		return mse_loss(preds, targets)
+		loss = mse_loss(preds, targets)
 	case .BCE:
-		return bce_loss(preds, targets)
+		loss = bce_loss(preds, targets)
 	case:
-		return 0.0
+		loss = 0.0
 	}
+
+    if model.l1 <= 0.0 && model.l2 <= 0.0 {
+        return loss
+    }
+
+    sum_l1, sum_l2 := 0.0, 0.0
+    for l in model.layers {
+        for w_v in l.weights.data {
+            sum_l1 += math.abs(w_v)
+            sum_l2 += w_v * w_v
+        }
+    }
+
+    if model.l1 > 0.0 {
+        loss += model.l1 * sum_l1
+    }
+    if model.l2 > 0.0 {
+        loss += (model.l2 / 2) * sum_l2
+    }
+
+    return loss
 }
 
 compute_initial_error :: proc "contextless" (
@@ -94,12 +116,9 @@ compute_initial_error :: proc "contextless" (
 	errors: Matrix,
 ) {
 	switch {
-	case loss == .CCE &&
-	     out_act == .Softmax,
-	     loss == .BCE &&
-	     out_act == .Sigmoid,
-	     loss == .MSE &&
-	     out_act == .None:
+	case loss == .CCE && out_act == .Softmax,
+	     loss == .BCE && out_act == .Sigmoid,
+	     loss == .MSE && out_act == .None:
 		// Fused shortcut
 		for i in 0 ..< len(errors.data) {
 			errors.data[i] = preds.data[i] - targets.data[i]

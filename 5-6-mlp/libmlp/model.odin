@@ -1,15 +1,28 @@
 package mlp
 
+import "core:math"
 Model :: struct {
 	layers: [dynamic]Layer,
 	loss:   Loss,
+
+    // Hyperparams where 0.0 == disabled
+    l1:          f64,
+    l2:          f64,
+    grad_clip:   f64,
+    weight_clip: f64,
+
+    is_training: bool
 }
 
 model_forward :: proc(m: Model, input: Matrix) -> Matrix {
 	prev := input
 
 	for &l in m.layers {
-		prev = layer_forward(prev, &l)
+        if m.is_training {
+            prev = layer_forward_train(prev, &l)
+        } else {
+            prev = layer_forward(prev, &l)
+        }
 	}
 
 	return prev
@@ -56,18 +69,29 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: Matrix) {
 		in_feat_cnt := prev_res.cols
 		out_feat_cnt := curr_l.weights.cols
 
-		grad_w := Matrix {
-			data = make([]f64, in_feat_cnt * out_feat_cnt),
-			rows = in_feat_cnt,
-			cols = out_feat_cnt,
-		}
+        grad_w: Matrix
+        grad_b: []f64
+        if len(curr_l.weight_grad.data) != in_feat_cnt * out_feat_cnt {
+            grad_w = Matrix {
+                data = make([]f64, in_feat_cnt * out_feat_cnt),
+                rows = in_feat_cnt,
+                cols = out_feat_cnt,
+            }
+        } else {
+            // Overwrite the new data
+            grad_w = curr_l.weight_grad
+        }
+        if len(curr_l.bias_grad) != out_feat_cnt {
+            grad_b = make([]f64, out_feat_cnt)
+        } else {
+            grad_b = curr_l.bias_grad
+        }
 
 		// Weight gradient calculation X^T * delta
 		// X is (Sample, Feature) and X^T is (Feature, Sample)
 		// delta is (Sample, Class)
 		matmul(prev_res, errors, dst = grad_w, scale = 1.0 / f64(sample_cnt), transpose_lhs = true)
 
-		grad_b := make([]f64, out_feat_cnt)
 
 		// Bias gradient calculation: B * delta
 		// B is (Class)
@@ -99,6 +123,15 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: Matrix) {
 		// delta is still (Sample, Class)
 		matmul(errors, curr_l.weights, dst = prev_errors, transpose_rhs = true)
 
+        // Mask out unactivated neurons so they don't start contributing to the error
+        prev_l_dropout_rate := model.layers[l - 1].dropout_rate
+        prev_l_dropout_mask := model.layers[l - 1].dropout_mask
+        if prev_l_dropout_rate > 0.0 && model.is_training && len(prev_l_dropout_mask.data) > 0 {
+            for &err, i in prev_errors.data {
+                err *= prev_l_dropout_mask.data[i]
+            }
+        }
+
 		prev_activation := model.layers[l - 1].activation
 		prev_z := model.layers[l - 1].pre_act
 		layer_activation_deriv(prev_activation, prev_z, prev_errors)
@@ -107,20 +140,116 @@ model_backward :: proc(model: Model, input, probs: Matrix, targets: Matrix) {
 
 		// errors hold backprop_errors_prealloc
 		// but we need it to reference current_errors_prealloc
-		// so we swap them
+		// so we swap fat pointers to them
 		backprop_errors_prealloc, current_errors_prealloc =
 			current_errors_prealloc, backprop_errors_prealloc
 	}
 }
 
 model_optimizer :: proc(m: Model, learning_rate: f64) {
-	for &l in m.layers {
-		for &w, i in l.weights.data {
-			w -= learning_rate * l.weight_grad.data[i]
+    scale := 1.0
+    uses_reg := m.l1 > 0.0 || m.l2 > 0.0
+    uses_grad_clipping := m.grad_clip > 0.0
+
+    if uses_reg || uses_grad_clipping {
+        norm_sq := 0.0
+        for &l in m.layers {
+            for &w, i in l.weights.data {
+                if m.l1 > 0.0 do l.weight_grad.data[i] += m.l1 * math.sign(w)
+                if m.l2 > 0.0 do l.weight_grad.data[i] += m.l2 * w
+                if uses_grad_clipping do norm_sq += l.weight_grad.data[i] * l.weight_grad.data[i]
+            }
+
+            if !uses_grad_clipping {
+                continue
+            }
+            for g in l.bias_grad {
+                norm_sq += g * g
+            }
+        }
+
+        if uses_grad_clipping {
+            global_norm := math.sqrt(norm_sq)
+            if global_norm > m.grad_clip {
+                scale = m.grad_clip / global_norm
+            }
+        }
+    }
+
+    eff_lr := learning_rate * scale
+
+    for &l in m.layers {
+        for &w, i in l.weights.data {
+            w -= eff_lr * l.weight_grad.data[i]
+            if m.weight_clip > 0.0 {
+                w = clamp(w, -m.weight_clip, m.weight_clip)
+            }
+        }
+
+        for &b, i in l.biases {
+            b -= eff_lr * l.bias_grad[i]
+        }
+    }
+}
+
+Model_Hyperparam :: enum u8 {
+	L1          = 0,
+	L2          = 1,
+	Grad_Clip   = 2,
+	Weight_Clip = 3,
+}
+
+Layer_Param :: enum u8 {
+	Dropout = 0,
+}
+
+model_dead_neurons :: proc(m: Model, input: Matrix, layer_idx: i32) -> f64 {
+	if len(m.layers) == 0 do return 0.0
+
+	count_dead_in_layer :: proc(l: ^Layer, sample_cnt: int) -> (int, int) {
+		neuron_cnt := l.weights.cols
+		dead_cnt := 0
+		st := stride(l.pre_act)
+
+		for j in 0 ..< neuron_cnt {
+			is_dead := true
+			for s in 0 ..< sample_cnt {
+				if l.pre_act.data[s * st + j] > 0.0 {
+					is_dead = false
+					break
+				}
+			}
+			if is_dead {
+				dead_cnt += 1
+			}
 		}
 
-		for &v, i in l.biases {
-			v -= learning_rate * l.bias_grad[i]
+		return dead_cnt, neuron_cnt
+	}
+
+	num_layers := len(m.layers)
+	num_hidden := max(0, num_layers - 1)
+
+	inference_m := m
+	inference_m.is_training = false
+	model_forward(inference_m, input)
+
+	if layer_idx >= 0 {
+		idx := int(layer_idx)
+		if idx >= num_layers do return 0.0
+		dead, total := count_dead_in_layer(&m.layers[idx], input.rows)
+		if total == 0 do return 0.0
+		return f64(dead) / f64(total) * 100.0
+	} else {
+		if num_hidden == 0 do return 0.0
+		total_dead := 0
+		total_neurons := 0
+		for l in 0 ..< num_hidden {
+			dead, total := count_dead_in_layer(&m.layers[l], input.rows)
+			total_dead += dead
+			total_neurons += total
 		}
+		if total_neurons == 0 do return 0.0
+		return f64(total_dead) / f64(total_neurons) * 100.0
 	}
 }

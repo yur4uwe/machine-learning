@@ -24,8 +24,10 @@ main :: proc() {
 	model := mlp.Model {
 		layers = make([dynamic]mlp.Layer),
 		loss   = .BCE,
+        is_training = true
 	}
 	defer delete(model.layers)
+	// append(&model.layers, mlp.layer_init(2, 8, .ReLU))
 	append(&model.layers, mlp.layer_init(2, 8, .ReLU))
 	append(&model.layers, mlp.layer_init(8, 1, .Sigmoid))
 
@@ -35,7 +37,7 @@ main :: proc() {
 	for step in 1 ..= training_steps {
 		probs := mlp.model_forward(model, xor_dataset)
 
-		loss = mlp.compute_model_loss(model.loss, probs, xor_targets)
+		loss = mlp.compute_model_loss(model, probs, xor_targets)
 		if step % 100 == 0 {
 			fmt.printfln("step %d: loss: %f", step, loss)
 			fmt.print("Predictions:\n[")
