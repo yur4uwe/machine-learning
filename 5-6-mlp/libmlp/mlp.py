@@ -45,7 +45,6 @@ class DenseLayer:
 class MLP:
     def __init__(self, loss: Loss, *layers: DenseLayer):
         self._handle = lib.model_create(int(loss))
-        self._loss = loss
         for layer in layers:
             lib.model_add_layer(
                 self._handle,
@@ -54,6 +53,16 @@ class MLP:
                 layer.activation,
                 layer.init_method,
             )
+
+    @classmethod
+    def load(cls, path: str) -> "MLP":
+        handle = lib.model_load_params(path.encode("utf-8"))
+        if not handle:
+            raise OSError(f"failed to load model from {path}")
+
+        self = cls.__new__(cls)
+        self._handle = handle
+        return self
 
     def train_step(self, X: np.ndarray, y: np.ndarray, lr: float) -> float:
         # X and y memory is pinned by NumPy; Odin reads directly via pointer
@@ -117,6 +126,11 @@ class MLP:
         lib.model_get_layer_params(self._handle, layer_idx, w_c, b_c)
         return w, b
 
+    def save_parameters(self, path: str):
+        ok = lib.model_save_params(self._handle, path.encode("utf-8"))
+        if not ok :
+            raise OSError(f"failed to save model to {path}")
+
     @property
     def _out_dim(self) -> int:
         return lib.model_output_dim(self._handle)
@@ -126,3 +140,6 @@ class MLP:
         if self._handle:
             lib.model_destroy(self._handle)
             self._handle = None
+
+def load_mlp() -> MLP:
+    return MLP(Loss.CCE)

@@ -5,6 +5,9 @@
 **/*_temp.ipynb
 **/ML*Practice.md
 
+# custom model file
+*.mlp*
+
 # precompiled libraries
 *.so 
 *.dll

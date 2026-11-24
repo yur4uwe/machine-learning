@@ -1,4 +1,5 @@
 import numpy as np
+
 from libmlp import MLP, Activation, DenseLayer, Loss, set_rng_seed
 
 BAD_SEED = 142

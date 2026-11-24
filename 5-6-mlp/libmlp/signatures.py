@@ -65,3 +65,14 @@ lib.model_forward_ffi.argtypes = [
     ctypes.c_uint32,
     ctypes.POINTER(ctypes.c_double),
 ]
+
+lib.model_save_params.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_char_p,
+]
+lib.model_save_params.restype = ctypes.c_bool
+
+lib.model_load_params.argtypes = [
+    ctypes.c_char_p,
+]
+lib.model_load_params.restype = ctypes.c_void_p
