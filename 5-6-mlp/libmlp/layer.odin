@@ -6,7 +6,7 @@ import "core:math/rand"
 // Must mutate undelying array because Matrix is only a slice descriptor
 Layer :: struct {
 	weights:     Matrix,
-	biases:      []f64,
+	biases:      []f32,
 	activation:  Activation,
 	init_method: Init_Method,
 
@@ -14,9 +14,9 @@ Layer :: struct {
 	post_act: Matrix,
 
 	weight_grad: Matrix,
-	bias_grad:   []f64,
+	bias_grad:   []f32,
 
-    dropout_rate: f64,
+    dropout_rate: f32,
     dropout_mask: Matrix,
 }
 
@@ -33,50 +33,50 @@ layer_init :: proc(
 	act: Activation,
 	ini_type: Init_Method = .Auto,
 ) -> Layer {
-	weights := make([]f64, in_feat * out_feat)
+	weights := make([]f32, in_feat * out_feat)
 
-	limit: f64
+	limit: f32
 
 	switch ini_type {
 	case .Auto:
 		switch act {
 		case .ReLU, .LeakyReLU:
-			limit = math.sqrt(6.0 / f64(in_feat))
+			limit = math.sqrt(6.0 / f32(in_feat))
 		case .Softmax, .None, .Sigmoid, .Tanh:
-			limit = math.sqrt(6.0 / f64(in_feat + out_feat))
+			limit = math.sqrt(6.0 / f32(in_feat + out_feat))
 		}
 	case .Kaiming:
-		limit = math.sqrt(6.0 / f64(in_feat))
+		limit = math.sqrt(6.0 / f32(in_feat))
 	case .Xavier:
-		limit = math.sqrt(6.0 / f64(in_feat + out_feat))
+		limit = math.sqrt(6.0 / f32(in_feat + out_feat))
 	case .Uniform:
-		limit = 1 / math.sqrt(f64(in_feat))
+		limit = 1 / math.sqrt(f32(in_feat))
 	case .Zeros:
 	// Odin by default zeroes the memory out
 	}
 
 	if ini_type != .Zeros {
 		for i in 0 ..< in_feat * out_feat {
-			weights[i] = rand.float64_range(-limit, limit)
+			weights[i] = rand.float32_range(-limit, limit)
 		}
 	}
 
 	w := Matrix{weights, in_feat, out_feat}
-	b := make([]f64, out_feat)
+	b := make([]f32, out_feat)
 
 	return Layer{weights = w, biases = b, activation = act, init_method = ini_type}
 }
 
 he_init :: proc(in_feat: int, out_feat: int, act: Activation) -> Layer {
-	he_limit := math.sqrt(6.0 / f64(in_feat))
+	he_limit := math.sqrt(6.0 / f32(in_feat))
 
-	weights := make([]f64, in_feat * out_feat)
+	weights := make([]f32, in_feat * out_feat)
 	for i in 0 ..< in_feat * out_feat {
-		weights[i] = rand.float64_range(-he_limit, he_limit)
+		weights[i] = rand.float32_range(-he_limit, he_limit)
 	}
 	m := Matrix{weights, in_feat, out_feat}
 
-	bias := make([]f64, out_feat)
+	bias := make([]f32, out_feat)
 	return Layer{weights = m, biases = bias, activation = act, init_method = .Kaiming}
 }
 
@@ -85,7 +85,7 @@ layer_forward :: proc(prev: Matrix, curr: ^Layer) -> Matrix {
 
 	if len(curr.pre_act.data) != data_size {
 		delete(curr.pre_act.data)
-		curr.pre_act.data = make([]f64, data_size)
+		curr.pre_act.data = make([]f32, data_size)
 		curr.pre_act.rows = prev.rows
 		curr.pre_act.cols = curr.weights.cols
 	}
@@ -113,14 +113,14 @@ layer_forward_train :: proc(prev: Matrix, curr: ^Layer) -> Matrix {
     data_size := len(curr.post_act.data)
     if len(curr.dropout_mask.data) != data_size {
         delete(curr.dropout_mask.data)
-        curr.dropout_mask.data = make([]f64, data_size)
+        curr.dropout_mask.data = make([]f32, data_size)
         curr.dropout_mask.rows = curr.post_act.rows
         curr.dropout_mask.cols = curr.post_act.cols
     }
 
     scale := 1.0 / (1.0 - curr.dropout_rate)
     for &m, i in curr.dropout_mask.data {
-        m = rand.float64() >= curr.dropout_rate ? scale : 0.0
+        m = rand.float32() >= curr.dropout_rate ? scale : 0.0
         curr.post_act.data[i] *= m
     }
 

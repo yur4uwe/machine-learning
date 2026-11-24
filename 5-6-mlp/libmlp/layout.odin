@@ -11,8 +11,8 @@ save_model :: proc(m: Model, f: ^os.File) {
 
 	layers := u32(len(m.layers))
 
-	floats := [?]f64{m.l1, m.l2, m.grad_clip, m.weight_clip}
-	model_hdr: [size_of(u32) + size_of(u8) + len(floats) * size_of(f64)]byte
+	floats := [?]f32{m.l1, m.l2, m.grad_clip, m.weight_clip}
+	model_hdr: [size_of(u32) + size_of(u8) + len(floats) * size_of(f32)]byte
 
 	start, end := 0, size_of(u32)
 	endian.put_u32(model_hdr[start:end], .Little, layers)
@@ -21,13 +21,13 @@ save_model :: proc(m: Model, f: ^os.File) {
 	model_hdr[start] = u8(m.loss)
 
 	for f_val in floats {
-		start = end; end += size_of(f64)
-		endian.put_f64(model_hdr[start:end], .Little, f_val)
+		start = end; end += size_of(f32)
+		endian.put_f32(model_hdr[start:end], .Little, f_val)
 	}
 
 	os.write_slice(f, model_hdr[:])
 
-	layer_hdr: [2 * size_of(u32) + 2 * size_of(u8) + size_of(f64)]byte
+	layer_hdr: [2 * size_of(u32) + 2 * size_of(u8) + size_of(f32)]byte
 	for &layer in m.layers {
 		inp_features := u32(layer.weights.rows)
 		start, end = 0, size_of(u32)
@@ -43,8 +43,8 @@ save_model :: proc(m: Model, f: ^os.File) {
 		start = end; end += size_of(u8)
 		layer_hdr[start] = u8(layer.init_method)
 
-		start = end; end += size_of(f64)
-		endian.put_f64(layer_hdr[start:end], .Little, layer.dropout_rate)
+		start = end; end += size_of(f32)
+		endian.put_f32(layer_hdr[start:end], .Little, layer.dropout_rate)
 
 		os.write_slice(f, layer_hdr[:])
 
@@ -63,8 +63,8 @@ Model_Load_Error :: union {
 }
 
 load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
-	model_header_size := len(magic_bytes) + size_of(u32) + size_of(u8) + 4 * size_of(f64)
-	layer_header_size := 2 * size_of(u32) + 2 * size_of(u8) + size_of(f64)
+	model_header_size := len(magic_bytes) + size_of(u32) + size_of(u8) + 4 * size_of(f32)
+	layer_header_size := 2 * size_of(u32) + 2 * size_of(u8) + size_of(f32)
 
 	max_buffer_size := max(model_header_size, layer_header_size)
 	buf := make([]byte, max_buffer_size)
@@ -96,13 +96,13 @@ load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
 		loss   = Loss(loss_byte),
 	}
 
-	floats := [?]^f64{
+	floats := [?]^f32{
 		&model.l1, &model.l2, &model.grad_clip, &model.weight_clip,
 	}
 
 	for ref_f in floats {
-		start = end; end += size_of(f64)
-		ref_f^, ok = endian.get_f64(model_header_buf[start:end], .Little)
+		start = end; end += size_of(f32)
+		ref_f^, ok = endian.get_f32(model_header_buf[start:end], .Little)
 		if !ok {
 			return model, Format_Error(5)
 		}
@@ -135,9 +135,9 @@ load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
 		start = end; end += size_of(u8)
 		init_byte := layer_header_buf[start]
 
-		start = end; end += size_of(f64)
-		dropout_rate: f64
-		dropout_rate, ok = endian.get_f64(layer_header_buf[start:end], .Little)
+		start = end; end += size_of(f32)
+		dropout_rate: f32
+		dropout_rate, ok = endian.get_f32(layer_header_buf[start:end], .Little)
 		if !ok {
 			return model, Format_Error(4)
 		}
@@ -148,7 +148,7 @@ load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
 		model.layers[i].init_method = Init_Method(init_byte)
 		model.layers[i].dropout_rate = dropout_rate
 
-		weights_len := int(inp_features * out_features) * size_of(f64)
+		weights_len := int(inp_features * out_features) * size_of(f32)
 		weights_buf := make([]byte, weights_len)
 		read = os.read_full(f, weights_buf) or_return
 		if read != weights_len {
@@ -156,9 +156,9 @@ load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
 			return model, File_Too_Short(2)
 		}
 
-		model.layers[i].weights.data = slice.reinterpret([]f64, weights_buf)
+		model.layers[i].weights.data = slice.reinterpret([]f32, weights_buf)
 
-		biases_len := int(out_features) * size_of(f64)
+		biases_len := int(out_features) * size_of(f32)
 		biases_buf := make([]byte, biases_len)
 		read = os.read_full(f, biases_buf) or_return
 		if read != biases_len {
@@ -166,7 +166,7 @@ load_model :: proc(f: ^os.File) -> (model: Model, err: Model_Load_Error) {
 			return model, File_Too_Short(3)
 		}
 
-		model.layers[i].biases = slice.reinterpret([]f64, biases_buf)
+		model.layers[i].biases = slice.reinterpret([]f32, biases_buf)
 	}
 
 	return model, nil

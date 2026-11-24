@@ -7,13 +7,13 @@ import mlp "libmlp"
 
 main :: proc() {
 	xor_dataset := mlp.Matrix {
-		data = []f64{0, 0, 0, 1, 1, 0, 1, 1},
+		data = []f32{0, 0, 0, 1, 1, 0, 1, 1},
 		rows = 4,
 		cols = 2,
 	}
 
 	xor_targets := mlp.Matrix {
-		data = []f64{0, 1, 1, 0},
+		data = []f32{0, 1, 1, 0},
 		rows = 4,
 		cols = 1,
 	}
@@ -31,9 +31,9 @@ main :: proc() {
 	append(&model.layers, mlp.layer_init(2, 8, .ReLU))
 	append(&model.layers, mlp.layer_init(8, 1, .Sigmoid))
 
-	learning_rate := 0.4
+	learning_rate: f32 = 0.4
 	training_steps := 500
-	loss: f64
+	loss: f32
 	for step in 1 ..= training_steps {
 		probs := mlp.model_forward(model, xor_dataset)
 
@@ -57,7 +57,7 @@ main :: proc() {
 			fmt.println("]")
 		}
 
-		mlp.model_backward(model, xor_dataset, probs, xor_targets)
+		mlp.model_backward(&model, xor_dataset, probs, xor_targets)
 		mlp.model_optimizer(model, learning_rate)
 	}
 

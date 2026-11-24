@@ -18,24 +18,24 @@ set_seed :: proc "c" (seed: u64) {
 @(export)
 model_forward_ffi :: proc "c" (
 	handle: rawptr,
-	x_data: [^]f64,
+	x_data: [^]f32,
 	rows, cols: u32,
-	out_probs: [^]f64,
+	out_probs: [^]f32,
 ) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	input := Matrix{data = x_data[:rows * cols], rows = int(rows), cols = int(cols)}
 	probs := model_forward(m^, input)
-	mem.copy(out_probs, raw_data(probs.data), len(probs.data) * size_of(f64))
+	mem.copy(out_probs, raw_data(probs.data), len(probs.data) * size_of(f32))
 }
 
 @(export)
 model_evaluate :: proc "c" (
 	handle: rawptr,
-	x_data: [^]f64,
+	x_data: [^]f32,
 	rows, cols: u32,
-	y_data: [^]f64,
-) -> f64 {
+	y_data: [^]f32,
+) -> f32 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	out_dim := m.layers[len(m.layers) - 1].weights.cols
@@ -53,11 +53,11 @@ model_evaluate :: proc "c" (
 @(export)
 model_train_step :: proc "c" (
 	handle: rawptr,
-	x_data: [^]f64,
+	x_data: [^]f32,
 	rows, cols: u32,
-	y_data: [^]f64,
-	lr: f64,
-) -> f64 {
+	y_data: [^]f32,
+	lr: f32,
+) -> f32 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	out_dim := m.layers[len(m.layers) - 1].weights.cols
@@ -70,7 +70,7 @@ model_train_step :: proc "c" (
 
 	probs := model_forward(m^, input)
 	loss := compute_model_loss(m^, probs, targets)
-	model_backward(m^, input, probs, targets)
+	model_backward(m, input, probs, targets)
 	model_optimizer(m^, lr)
 	return loss
 }
@@ -96,10 +96,10 @@ model_is_training :: proc "c" (handle: rawptr) -> bool {
 @(export)
 model_get_dead_neurons :: proc "c" (
 	handle: rawptr,
-	x_data: [^]f64,
+	x_data: [^]f32,
 	rows, cols: u32,
 	layer_idx: i32,
-) -> f64 {
+) -> f32 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	input := Matrix{data = x_data[:rows * cols], rows = int(rows), cols = int(cols)}
@@ -134,35 +134,35 @@ model_layer_dims :: proc "c" (handle: rawptr, layer_idx: u32, in_feat, out_feat:
 }
 
 @(export)
-model_get_layer_params :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^]f64, dst_b: [^]f64) {
+model_get_layer_params :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^]f32, dst_b: [^]f32) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	w := m.layers[layer_idx].weights.data
 	b := m.layers[layer_idx].biases
-	mem.copy(dst_w, raw_data(w), len(w) * size_of(f64))
-	mem.copy(dst_b, raw_data(b), len(b) * size_of(f64))
+	mem.copy(dst_w, raw_data(w), len(w) * size_of(f32))
+	mem.copy(dst_b, raw_data(b), len(b) * size_of(f32))
 }
 
 @(export)
-model_set_layer_params :: proc "c" (handle: rawptr, layer_idx: u32, src_w: [^]f64, src_b: [^]f64) {
+model_set_layer_params :: proc "c" (handle: rawptr, layer_idx: u32, src_w: [^]f32, src_b: [^]f32) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	if int(layer_idx) >= len(m.layers) do return
 	w := m.layers[layer_idx].weights.data
 	b := m.layers[layer_idx].biases
-	if len(w) > 0 && src_w != nil do mem.copy(raw_data(w), src_w, len(w) * size_of(f64))
-	if len(b) > 0 && src_b != nil do mem.copy(raw_data(b), src_b, len(b) * size_of(f64))
+	if len(w) > 0 && src_w != nil do mem.copy(raw_data(w), src_w, len(w) * size_of(f32))
+	if len(b) > 0 && src_b != nil do mem.copy(raw_data(b), src_b, len(b) * size_of(f32))
 }
 
 @(export)
-model_get_layer_gradients :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^]f64, dst_b: [^]f64) {
+model_get_layer_gradients :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^]f32, dst_b: [^]f32) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	if int(layer_idx) >= len(m.layers) do return
 	w_grad := m.layers[layer_idx].weight_grad.data
 	b_grad := m.layers[layer_idx].bias_grad
-	if len(w_grad) > 0 && dst_w != nil do mem.copy(dst_w, raw_data(w_grad), len(w_grad) * size_of(f64))
-	if len(b_grad) > 0 && dst_b != nil do mem.copy(dst_b, raw_data(b_grad), len(b_grad) * size_of(f64))
+	if len(w_grad) > 0 && dst_w != nil do mem.copy(dst_w, raw_data(w_grad), len(w_grad) * size_of(f32))
+	if len(b_grad) > 0 && dst_b != nil do mem.copy(dst_b, raw_data(b_grad), len(b_grad) * size_of(f32))
 }
 
 // -----------------------------------------------------------------------------
@@ -170,7 +170,7 @@ model_get_layer_gradients :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^
 // -----------------------------------------------------------------------------
 
 @(export)
-model_get_hyperparam :: proc "c" (handle: rawptr, param: u8) -> f64 {
+model_get_hyperparam :: proc "c" (handle: rawptr, param: u8) -> f32 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	switch Model_Hyperparam(param) {
@@ -183,7 +183,7 @@ model_get_hyperparam :: proc "c" (handle: rawptr, param: u8) -> f64 {
 }
 
 @(export)
-model_set_hyperparam :: proc "c" (handle: rawptr, param: u8, val: f64) {
+model_set_hyperparam :: proc "c" (handle: rawptr, param: u8, val: f32) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	switch Model_Hyperparam(param) {
@@ -195,7 +195,7 @@ model_set_hyperparam :: proc "c" (handle: rawptr, param: u8, val: f64) {
 }
 
 @(export)
-model_get_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8) -> f64 {
+model_get_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8) -> f32 {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	if int(layer_idx) >= len(m.layers) do return 0.0
@@ -206,7 +206,7 @@ model_get_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8) ->
 }
 
 @(export)
-model_set_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8, val: f64) {
+model_set_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8, val: f32) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	if int(layer_idx) >= len(m.layers) do return

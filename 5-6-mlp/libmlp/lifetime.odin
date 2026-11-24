@@ -10,7 +10,7 @@ model_create :: proc "c" (loss: u8) -> rawptr {
 }
 
 @(export)
-model_add_layer :: proc "c" (handle: rawptr, in_feat, out_feat: u32, act: u8, init: u8, dropout_rate: f64) {
+model_add_layer :: proc "c" (handle: rawptr, in_feat, out_feat: u32, act: u8, init: u8, dropout_rate: f32) {
 	context = runtime.default_context()
 	m := (^Model)(handle)
 	l := layer_init(int(in_feat), int(out_feat), Activation(act), Init_Method(init))
@@ -31,6 +31,8 @@ model_destroy :: proc "c" (handle: rawptr) {
 		delete(l.bias_grad)
         delete(l.dropout_mask.data)
 	}
+	delete(m.err_buf_a)
+	delete(m.err_buf_b)
 	delete(m.layers)
 	free(m)
 }

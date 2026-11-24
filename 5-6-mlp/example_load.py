@@ -4,7 +4,7 @@ from libmlp import MLP
 
 model = MLP.load("test.mlp1")
 
-X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float64)
+X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32)
 y = np.array([0, 1, 1, 0], dtype=np.int32)
 
 preds = model.forward(X)

@@ -8,10 +8,10 @@ Loss :: enum {
 	MSE,
 }
 
-cce_loss :: proc "contextless" (preds, targets: Matrix) -> f64 {
-	eps := 1e-15
-	n := f64(preds.rows)
-	sum := 0.0
+cce_loss :: proc "contextless" (preds, targets: Matrix) -> f32 {
+	eps := f32(1e-7)
+	n := f32(preds.rows)
+	sum: f32 = 0.0
 
 	for v, i in preds.data {
 		target := targets.data[i]
@@ -25,18 +25,18 @@ cce_loss :: proc "contextless" (preds, targets: Matrix) -> f64 {
 }
 
 cce_loss_deriv :: proc "contextless" (preds, targets, errors: Matrix) {
-	eps := 1e-15
+	eps := f32(1e-7)
 	for v, i in preds.data {
 		prob := clamp(v, eps, 1.0)
 		errors.data[i] = -targets.data[i] / prob
 	}
 }
 
-bce_loss :: proc "contextless" (preds, targets: Matrix) -> f64 {
-	eps := 1e-15
-	ndiv1 := 1.0 / f64(preds.rows * preds.cols)
+bce_loss :: proc "contextless" (preds, targets: Matrix) -> f32 {
+	eps := f32(1e-7)
+	ndiv1 := 1.0 / f32(preds.rows * preds.cols)
 
-	sum := 0.0
+	sum: f32 = 0.0
 	for v, i in preds.data {
 		tv := targets.data[i]
 		prob := clamp(v, eps, 1.0 - eps)
@@ -47,17 +47,17 @@ bce_loss :: proc "contextless" (preds, targets: Matrix) -> f64 {
 }
 
 bce_loss_deriv :: proc "contextless" (preds, targets, errors: Matrix) {
-	eps := 1e-15
+	eps := f32(1e-7)
 	for v, i in preds.data {
 		prob := clamp(v, eps, 1.0 - eps)
 		errors.data[i] = (prob - targets.data[i]) / (prob * (1.0 - prob))
 	}
 }
 
-mse_loss :: proc "contextless" (preds, targets: Matrix) -> f64 {
-	ndiv1 := 1.0 / f64(preds.rows * preds.cols)
+mse_loss :: proc "contextless" (preds, targets: Matrix) -> f32 {
+	ndiv1 := 1.0 / f32(preds.rows * preds.cols)
 
-	sum := 0.0
+	sum: f32 = 0.0
 	for v, i in preds.data {
 		diff := v - targets.data[i]
 		sum += diff * diff
@@ -72,8 +72,8 @@ mse_loss_deriv :: proc "contextless" (preds, targets, errors: Matrix) {
 	}
 }
 
-compute_model_loss :: proc "contextless" (model: Model, preds, targets: Matrix) -> f64 {
-    loss: f64
+compute_model_loss :: proc "contextless" (model: Model, preds, targets: Matrix) -> f32 {
+    loss: f32
 	switch model.loss {
 	case .CCE:
 		loss = cce_loss(preds, targets)
@@ -89,7 +89,7 @@ compute_model_loss :: proc "contextless" (model: Model, preds, targets: Matrix) 
         return loss
     }
 
-    sum_l1, sum_l2 := 0.0, 0.0
+    sum_l1, sum_l2: f32 = 0.0, 0.0
     for l in model.layers {
         for w_v in l.weights.data {
             sum_l1 += math.abs(w_v)
@@ -120,7 +120,12 @@ compute_initial_error :: proc "contextless" (
 	     loss == .BCE && out_act == .Sigmoid,
 	     loss == .MSE && out_act == .None:
 		// Fused shortcut
-		for i in 0 ..< len(errors.data) {
+		n := len(errors.data)
+		i := 0
+		for ; i + 8 <= n; i += 8 {
+			store_v8(errors.data, i, load_v8(preds.data, i) - load_v8(targets.data, i))
+		}
+		for ; i < n; i += 1 {
 			errors.data[i] = preds.data[i] - targets.data[i]
 		}
 	case:
@@ -133,6 +138,6 @@ compute_initial_error :: proc "contextless" (
 		case .MSE:
 			mse_loss_deriv(preds, targets, errors)
 		}
-		layer_activation_deriv(out_act, out_z, errors)
+		layer_activation_deriv(out_act, out_z, preds, errors)
 	}
 }

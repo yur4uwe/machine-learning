@@ -17,7 +17,7 @@ lib.model_add_layer.argtypes = [
     ctypes.c_uint32,
     ctypes.c_uint8,
     ctypes.c_uint8,
-    ctypes.c_double,
+    ctypes.c_float,
 ]
 
 lib.model_output_dim.argtypes = [ctypes.c_void_p]
@@ -36,35 +36,35 @@ lib.model_layer_dims.argtypes = [
 lib.model_get_layer_params.argtypes = [
     ctypes.c_void_p,
     ctypes.c_uint32,
-    ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
+    ctypes.POINTER(ctypes.c_float),
 ]
 
 lib.model_train_step.argtypes = [
     ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
     ctypes.c_uint32,
     ctypes.c_uint32,
-    ctypes.POINTER(ctypes.c_double),
-    ctypes.c_double,
+    ctypes.POINTER(ctypes.c_float),
+    ctypes.c_float,
 ]
-lib.model_train_step.restype = ctypes.c_double
+lib.model_train_step.restype = ctypes.c_float
 
 lib.model_evaluate.argtypes = [
     ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
     ctypes.c_uint32,
     ctypes.c_uint32,
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
 ]
-lib.model_evaluate.restype = ctypes.c_double
+lib.model_evaluate.restype = ctypes.c_float
 
 lib.model_forward_ffi.argtypes = [
     ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
     ctypes.c_uint32,
     ctypes.c_uint32,
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
 ]
 
 lib.model_save_params.argtypes = [
@@ -91,37 +91,37 @@ lib.model_is_training.restype = ctypes.c_bool
 lib.model_set_layer_params.argtypes = [
     ctypes.c_void_p,
     ctypes.c_uint32,
-    ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
+    ctypes.POINTER(ctypes.c_float),
 ]
 
 lib.model_get_layer_gradients.argtypes = [
     ctypes.c_void_p,
     ctypes.c_uint32,
-    ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
+    ctypes.POINTER(ctypes.c_float),
 ]
 
 lib.model_get_dead_neurons.argtypes = [
     ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_float),
     ctypes.c_uint32,
     ctypes.c_uint32,
     ctypes.c_int32,
 ]
-lib.model_get_dead_neurons.restype = ctypes.c_double
+lib.model_get_dead_neurons.restype = ctypes.c_float
 
 lib.model_get_hyperparam.argtypes = [ctypes.c_void_p, ctypes.c_uint8]
-lib.model_get_hyperparam.restype = ctypes.c_double
+lib.model_get_hyperparam.restype = ctypes.c_float
 
-lib.model_set_hyperparam.argtypes = [ctypes.c_void_p, ctypes.c_uint8, ctypes.c_double]
+lib.model_set_hyperparam.argtypes = [ctypes.c_void_p, ctypes.c_uint8, ctypes.c_float]
 
 lib.model_get_layer_param.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint8]
-lib.model_get_layer_param.restype = ctypes.c_double
+lib.model_get_layer_param.restype = ctypes.c_float
 
 lib.model_set_layer_param.argtypes = [
     ctypes.c_void_p,
     ctypes.c_uint32,
     ctypes.c_uint8,
-    ctypes.c_double,
+    ctypes.c_float,
 ]

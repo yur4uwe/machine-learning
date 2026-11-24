@@ -138,39 +138,39 @@ class MLP:
 
     def train_step(self, X: np.ndarray, y: np.ndarray, lr: float) -> float:
         # X and y memory is pinned by NumPy; Odin reads directly via pointer
-        X = np.ascontiguousarray(X, dtype=np.float64)
+        X = np.ascontiguousarray(X, dtype=np.float32)
         if y.ndim == 1:
             if self._out_dim > 1:
-                y = np.eye(self._out_dim, dtype=np.float64)[y]
+                y = np.eye(self._out_dim, dtype=np.float32)[y]
             else:
-                y = y.reshape(-1, 1).astype(np.float64)
+                y = y.reshape(-1, 1).astype(np.float32)
         else:
-            y = np.ascontiguousarray(y, dtype=np.float64)
+            y = np.ascontiguousarray(y, dtype=np.float32)
 
-        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        y_c = y.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        y_c = y.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         return lib.model_train_step(self._handle, X_c, X.shape[0], X.shape[1], y_c, lr)
 
     def forward(self, X: np.ndarray) -> np.ndarray:
-        out = np.empty((X.shape[0], self._out_dim), dtype=np.float64)
-        X = np.ascontiguousarray(X, dtype=np.float64)
-        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        out_c = out.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        out = np.empty((X.shape[0], self._out_dim), dtype=np.float32)
+        X = np.ascontiguousarray(X, dtype=np.float32)
+        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        out_c = out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         lib.model_forward_ffi(self._handle, X_c, X.shape[0], X.shape[1], out_c)
         return out
 
     def evaluate(self, X: np.ndarray, y: np.ndarray) -> float:
-        X = np.ascontiguousarray(X, dtype=np.float64)
+        X = np.ascontiguousarray(X, dtype=np.float32)
         if y.ndim == 1:
             if self._out_dim > 1:
-                y = np.eye(self._out_dim, dtype=np.float64)[y]
+                y = np.eye(self._out_dim, dtype=np.float32)[y]
             else:
-                y = y.reshape(-1, 1).astype(np.float64)
+                y = y.reshape(-1, 1).astype(np.float32)
         else:
-            y = np.ascontiguousarray(y, dtype=np.float64)
+            y = np.ascontiguousarray(y, dtype=np.float32)
 
-        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        y_c = y.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        y_c = y.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         return lib.model_evaluate(self._handle, X_c, X.shape[0], X.shape[1], y_c)
 
     @property
@@ -190,11 +190,11 @@ class MLP:
             ctypes.byref(out_feat),
         )
 
-        w = np.empty((in_feat.value, out_feat.value), dtype=np.float64)
-        b = np.empty((out_feat.value,), dtype=np.float64)
+        w = np.empty((in_feat.value, out_feat.value), dtype=np.float32)
+        b = np.empty((out_feat.value,), dtype=np.float32)
 
-        w_c = w.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        b_c = b.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        w_c = w.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        b_c = b.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         lib.model_get_layer_params(self._handle, layer_idx, w_c, b_c)
         return w, b
 
@@ -211,8 +211,8 @@ class MLP:
             ctypes.byref(out_feat),
         )
 
-        w = np.ascontiguousarray(w, dtype=np.float64)
-        b = np.ascontiguousarray(b, dtype=np.float64)
+        w = np.ascontiguousarray(w, dtype=np.float32)
+        b = np.ascontiguousarray(b, dtype=np.float32)
 
         if w.shape != (in_feat.value, out_feat.value):
             raise ValueError(
@@ -223,8 +223,8 @@ class MLP:
                 f"Bias shape {b.shape} does not match layer output dimension ({out_feat.value},)"
             )
 
-        w_c = w.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        b_c = b.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        w_c = w.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        b_c = b.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         lib.model_set_layer_params(self._handle, layer_idx, w_c, b_c)
 
     def get_layer_gradients(self, layer_idx: int) -> tuple[np.ndarray, np.ndarray]:
@@ -240,17 +240,17 @@ class MLP:
             ctypes.byref(out_feat),
         )
 
-        gw = np.empty((in_feat.value, out_feat.value), dtype=np.float64)
-        gb = np.empty((out_feat.value,), dtype=np.float64)
+        gw = np.empty((in_feat.value, out_feat.value), dtype=np.float32)
+        gb = np.empty((out_feat.value,), dtype=np.float32)
 
-        gw_c = gw.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        gb_c = gb.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        gw_c = gw.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        gb_c = gb.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         lib.model_get_layer_gradients(self._handle, layer_idx, gw_c, gb_c)
         return gw, gb
 
     def get_dead_neurons(self, X: np.ndarray, layer_idx: int = -1) -> float:
-        X = np.ascontiguousarray(X, dtype=np.float64)
-        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        X = np.ascontiguousarray(X, dtype=np.float32)
+        X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         return lib.model_get_dead_neurons(self._handle, X_c, X.shape[0], X.shape[1], layer_idx)
 
     @property

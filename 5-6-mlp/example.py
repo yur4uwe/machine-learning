@@ -15,7 +15,7 @@ if __name__ == "__main__":
     )
 
     # XOR dataset
-    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float64)
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32)
     y = np.array([0, 1, 1, 0], dtype=np.int32)
 
     print("Initial Predictions:")
