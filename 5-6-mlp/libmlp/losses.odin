@@ -123,7 +123,7 @@ compute_initial_error :: proc "contextless" (
 		n := len(errors.data)
 		i := 0
 		for ; i + 8 <= n; i += 8 {
-			store_v8(errors.data, i, load_v8(preds.data, i) - load_v8(targets.data, i))
+			load_from_simd_reg(errors.data, i, load_into_simd_reg(preds.data, i) - load_into_simd_reg(targets.data, i))
 		}
 		for ; i < n; i += 1 {
 			errors.data[i] = preds.data[i] - targets.data[i]

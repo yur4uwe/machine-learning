@@ -14,11 +14,11 @@ Activation :: enum {
 }
 
 relu :: proc "contextless" (m: Matrix) {
-	zero := V8(0.0)
+	zero := simd_lane(0.0)
 	n := len(m.data)
 	i := 0
 	for ; i + 8 <= n; i += 8 {
-		store_v8(m.data, i, simd.max(load_v8(m.data, i), zero))
+		load_from_simd_reg(m.data, i, simd.max(load_into_simd_reg(m.data, i), zero))
 	}
 	for ; i < n; i += 1 {
 		m.data[i] = max(0.0, m.data[i])
@@ -40,15 +40,16 @@ sigmoid :: proc "contextless" (m: Matrix) {
 }
 
 dsigmoid :: proc "contextless" (a: Matrix, grad: Matrix, act_scale: f32 = 1.0) {
-	one := V8(1.0)
-	sv := V8(act_scale)
+	one := simd_lane(1.0)
+	sv := simd_lane(act_scale)
 	n := len(grad.data)
 	i := 0
 	for ; i + 8 <= n; i += 8 {
-		s := load_v8(a.data, i) * sv
-		g := load_v8(grad.data, i)
-		store_v8(grad.data, i, g * s * (one - s))
+		s := load_into_simd_reg(a.data, i) * sv
+		g := load_into_simd_reg(grad.data, i)
+		load_from_simd_reg(grad.data, i, g * s * (one - s))
 	}
+
 	for ; i < n; i += 1 {
 		s := a.data[i] * act_scale
 		grad.data[i] *= s * (1.0 - s)
@@ -62,14 +63,14 @@ tanh_act :: proc "contextless" (m: Matrix) {
 }
 
 dtanh :: proc "contextless" (a: Matrix, grad: Matrix, act_scale: f32 = 1.0) {
-	one := V8(1.0)
-	sv := V8(act_scale)
+	one := simd_lane(1.0)
+	sv := simd_lane(act_scale)
 	n := len(grad.data)
 	i := 0
 	for ; i + 8 <= n; i += 8 {
-		t := load_v8(a.data, i) * sv
-		g := load_v8(grad.data, i)
-		store_v8(grad.data, i, g * (one - t * t))
+		t := load_into_simd_reg(a.data, i) * sv
+		g := load_into_simd_reg(grad.data, i)
+		load_from_simd_reg(grad.data, i, g * (one - t * t))
 	}
 	for ; i < n; i += 1 {
 		t := a.data[i] * act_scale

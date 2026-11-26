@@ -118,13 +118,19 @@ class MLP:
 
     def get_layer_dropout(self, layer_idx: int) -> float:
         if layer_idx < 0 or layer_idx >= self.num_layers:
-            raise IndexError(f"Layer index {layer_idx} out of range [0, {self.num_layers})")
+            raise IndexError(
+                f"Layer index {layer_idx} out of range [0, {self.num_layers})"
+            )
         return lib.model_get_layer_param(self._handle, layer_idx, LayerParam.DROPOUT)
 
     def set_layer_dropout(self, layer_idx: int, dropout_rate: float):
         if layer_idx < 0 or layer_idx >= self.num_layers:
-            raise IndexError(f"Layer index {layer_idx} out of range [0, {self.num_layers})")
-        lib.model_set_layer_param(self._handle, layer_idx, LayerParam.DROPOUT, float(dropout_rate))
+            raise IndexError(
+                f"Layer index {layer_idx} out of range [0, {self.num_layers})"
+            )
+        lib.model_set_layer_param(
+            self._handle, layer_idx, LayerParam.DROPOUT, float(dropout_rate)
+        )
 
     @classmethod
     def load(cls, path: str) -> "MLP":
@@ -179,7 +185,9 @@ class MLP:
 
     def get_layer_parameters(self, layer_idx: int) -> tuple[np.ndarray, np.ndarray]:
         if layer_idx < 0 or layer_idx >= self.num_layers:
-            raise IndexError(f"Layer index {layer_idx} out of range [0, {self.num_layers})")
+            raise IndexError(
+                f"Layer index {layer_idx} out of range [0, {self.num_layers})"
+            )
 
         in_feat = ctypes.c_uint32()
         out_feat = ctypes.c_uint32()
@@ -200,7 +208,9 @@ class MLP:
 
     def set_layer_parameters(self, layer_idx: int, w: np.ndarray, b: np.ndarray):
         if layer_idx < 0 or layer_idx >= self.num_layers:
-            raise IndexError(f"Layer index {layer_idx} out of range [0, {self.num_layers})")
+            raise IndexError(
+                f"Layer index {layer_idx} out of range [0, {self.num_layers})"
+            )
 
         in_feat = ctypes.c_uint32()
         out_feat = ctypes.c_uint32()
@@ -229,7 +239,9 @@ class MLP:
 
     def get_layer_gradients(self, layer_idx: int) -> tuple[np.ndarray, np.ndarray]:
         if layer_idx < 0 or layer_idx >= self.num_layers:
-            raise IndexError(f"Layer index {layer_idx} out of range [0, {self.num_layers})")
+            raise IndexError(
+                f"Layer index {layer_idx} out of range [0, {self.num_layers})"
+            )
 
         in_feat = ctypes.c_uint32()
         out_feat = ctypes.c_uint32()
@@ -251,7 +263,9 @@ class MLP:
     def get_dead_neurons(self, X: np.ndarray, layer_idx: int = -1) -> float:
         X = np.ascontiguousarray(X, dtype=np.float32)
         X_c = X.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        return lib.model_get_dead_neurons(self._handle, X_c, X.shape[0], X.shape[1], layer_idx)
+        return lib.model_get_dead_neurons(
+            self._handle, X_c, X.shape[0], X.shape[1], layer_idx
+        )
 
     @property
     def is_training(self) -> bool:
@@ -289,7 +303,7 @@ class MLP:
 
             for layer_idx in range(self.num_layers):
                 w, b = self.get_layer_parameters(layer_idx)
-                gw, gb = self.get_layer_gradients(layer_idx)
+                gw, _ = self.get_layer_gradients(layer_idx)
 
                 # Check random weight entries
                 w_coords = [
@@ -317,12 +331,14 @@ class MLP:
                     rel_err = abs(ana_grad - num_grad) / denom
                     max_rel_error = max(max_rel_error, rel_err)
 
-                    checks.append({
-                        "param": f"W[{layer_idx}][{r},{c}]",
-                        "analytic": ana_grad,
-                        "numeric": num_grad,
-                        "rel_error": rel_err,
-                    })
+                    checks.append(
+                        {
+                            "param": f"W[{layer_idx}][{r},{c}]",
+                            "analytic": ana_grad,
+                            "numeric": num_grad,
+                            "rel_error": rel_err,
+                        }
+                    )
 
             return {
                 "max_relative_error": max_rel_error,
@@ -336,7 +352,7 @@ class MLP:
 
     def save_parameters(self, path: str):
         ok = lib.model_save_params(self._handle, path.encode("utf-8"))
-        if not ok :
+        if not ok:
             raise OSError(f"failed to save model to {path}")
 
     @property
@@ -348,6 +364,3 @@ class MLP:
         if self._handle:
             lib.model_destroy(self._handle)
             self._handle = None
-
-def load_mlp() -> MLP:
-    return MLP(Loss.CCE)

@@ -129,7 +129,6 @@ def build_mlp(
     dropout_rate: float = 0.0,
     seed: int = SEED,
 ) -> MLP:
-    """Create a 3-hidden-layer MLP with ReLU hidden layers and Softmax output."""
     set_rng_seed(seed)
     return MLP(
         Loss.CCE,

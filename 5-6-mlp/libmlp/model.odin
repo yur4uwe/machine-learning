@@ -1,5 +1,6 @@
 package mlp
 
+import "core:mem"
 import "core:math"
 Model :: struct {
 	layers: [dynamic]Layer,
@@ -104,7 +105,6 @@ model_backward :: proc(model: ^Model, input, probs: Matrix, targets: Matrix) {
 		// delta is (Sample, Class)
 		matmul(transpose(prev_res), errors, dst = grad_w, scale = 1.0 / f32(sample_cnt))
 
-
 		// Bias gradient calculation: B * delta
 		// B is (Class)
 		// delta is (Sample, Class)
@@ -115,17 +115,17 @@ model_backward :: proc(model: ^Model, input, probs: Matrix, targets: Matrix) {
 			err_row := errors.data[sample * out_feat_cnt : sample * out_feat_cnt + out_feat_cnt]
 			class := 0
 			for ; class + 8 <= out_feat_cnt; class += 8 {
-				store_v8(grad_b, class, load_v8(grad_b, class) + load_v8(err_row, class))
+				load_from_simd_reg(grad_b, class, load_into_simd_reg(grad_b, class) + load_into_simd_reg(err_row, class))
 			}
 			for ; class < out_feat_cnt; class += 1 {
 				grad_b[class] += err_row[class]
 			}
 		}
 		inv_samples := 1.0 / f32(sample_cnt)
-		inv_vec := V8(inv_samples)
+		inv_vec := simd_lane(inv_samples)
 		c := 0
 		for ; c + 8 <= out_feat_cnt; c += 8 {
-			store_v8(grad_b, c, load_v8(grad_b, c) * inv_vec)
+			load_from_simd_reg(grad_b, c, load_into_simd_reg(grad_b, c) * inv_vec)
 		}
 		for ; c < out_feat_cnt; c += 1 {
 			grad_b[c] *= inv_samples
@@ -201,7 +201,7 @@ model_optimizer :: proc(m: Model, learning_rate: f32) {
     }
 
     eff_lr := learning_rate * scale
-    lr_vec := V8(eff_lr)
+    lr_vec := simd_lane(eff_lr)
 
     for &l in m.layers {
         if !uses_grad_clipping && uses_reg {
@@ -219,9 +219,9 @@ model_optimizer :: proc(m: Model, learning_rate: f32) {
             n_w := len(l.weights.data)
             i := 0
             for ; i + 8 <= n_w; i += 8 {
-                w_v := load_v8(l.weights.data, i)
-                g_v := load_v8(l.weight_grad.data, i)
-                store_v8(l.weights.data, i, w_v - lr_vec * g_v)
+                w_v := load_into_simd_reg(l.weights.data, i)
+                g_v := load_into_simd_reg(l.weight_grad.data, i)
+                load_from_simd_reg(l.weights.data, i, w_v - lr_vec * g_v)
             }
             for ; i < n_w; i += 1 {
                 l.weights.data[i] -= eff_lr * l.weight_grad.data[i]

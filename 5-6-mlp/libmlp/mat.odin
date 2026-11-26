@@ -4,14 +4,14 @@ import "base:intrinsics"
 import "core:fmt"
 import "core:simd"
 
-V8 :: #simd[8]f32
+simd_lane :: #simd[8]f32
 
-load_v8 :: #force_inline proc "contextless" (s: []f32, idx: int) -> V8 {
-	return intrinsics.unaligned_load((^V8)(&s[idx]))
+load_into_simd_reg :: #force_inline proc "contextless" (s: []f32, idx: int) -> simd_lane {
+	return intrinsics.unaligned_load((^simd_lane)(&s[idx]))
 }
 
-store_v8 :: #force_inline proc "contextless" (s: []f32, idx: int, v: V8) {
-	intrinsics.unaligned_store((^V8)(&s[idx]), v)
+load_from_simd_reg :: #force_inline proc "contextless" (s: []f32, idx: int, v: simd_lane) {
+	intrinsics.unaligned_store((^simd_lane)(&s[idx]), v)
 }
 
 // Row major matrix
@@ -78,13 +78,13 @@ matmul_nn :: proc(
 		lhs_row := lhs.data[i * K : i * K + K]
 		for k in 0 ..< K {
 			a := lhs_row[k]
-			a_vec := V8(a)
+			a_vec := simd_lane(a)
 			rhs_row := rhs.data[k * N : k * N + N]
 			j := 0
 			for ; j + 8 <= N; j += 8 {
-				d := load_v8(dst_row, j)
-				r := load_v8(rhs_row, j)
-				store_v8(dst_row, j, simd.fused_mul_add(a_vec, r, d))
+				d := load_into_simd_reg(dst_row, j)
+				r := load_into_simd_reg(rhs_row, j)
+				load_from_simd_reg(dst_row, j, simd.fused_mul_add(a_vec, r, d))
 			}
 			for ; j < N; j += 1 {
 				dst_row[j] += a * rhs_row[j]
@@ -92,10 +92,10 @@ matmul_nn :: proc(
 		}
 
 		if scale != 1.0 {
-			s_vec := V8(scale)
+			s_vec := simd_lane(scale)
 			j := 0
 			for ; j + 8 <= N; j += 8 {
-				store_v8(dst_row, j, load_v8(dst_row, j) * s_vec)
+				load_from_simd_reg(dst_row, j, load_into_simd_reg(dst_row, j) * s_vec)
 			}
 			for ; j < N; j += 1 {
 				dst_row[j] *= scale
@@ -141,13 +141,13 @@ matmul_tn :: proc(
 		rhs_row := rhs.data[k * N : k * N + N]
 		for i in 0 ..< M {
 			a := lhs_row[i]
-			a_vec := V8(a)
+			a_vec := simd_lane(a)
 			dst_row := dst.data[i * N : i * N + N]
 			j := 0
 			for ; j + 8 <= N; j += 8 {
-				d := load_v8(dst_row, j)
-				r := load_v8(rhs_row, j)
-				store_v8(dst_row, j, simd.fused_mul_add(a_vec, r, d))
+				d := load_into_simd_reg(dst_row, j)
+				r := load_into_simd_reg(rhs_row, j)
+				load_from_simd_reg(dst_row, j, simd.fused_mul_add(a_vec, r, d))
 			}
 			for ; j < N; j += 1 {
 				dst_row[j] += a * rhs_row[j]
@@ -156,11 +156,11 @@ matmul_tn :: proc(
 	}
 
 	if scale != 1.0 {
-		s_vec := V8(scale)
+		s_vec := simd_lane(scale)
 		n_total := len(dst.data)
 		idx := 0
 		for ; idx + 8 <= n_total; idx += 8 {
-			store_v8(dst.data, idx, load_v8(dst.data, idx) * s_vec)
+			load_from_simd_reg(dst.data, idx, load_into_simd_reg(dst.data, idx) * s_vec)
 		}
 		for ; idx < n_total; idx += 1 {
 			dst.data[idx] *= scale
@@ -196,11 +196,11 @@ matmul_nt :: proc(
 		dst_row := dst.data[i * N : i * N + N]
 		for j in 0 ..< N {
 			rhs_row := rhs.data[j * K : j * K + K]
-			acc := V8(0.0)
+			acc := simd_lane(0.0)
 			k := 0
 			for ; k + 8 <= K; k += 8 {
-				l := load_v8(lhs_row, k)
-				r := load_v8(rhs_row, k)
+				l := load_into_simd_reg(lhs_row, k)
+				r := load_into_simd_reg(rhs_row, k)
 				acc = simd.fused_mul_add(l, r, acc)
 			}
 			agg := (has_bias ? bias[j] : 0.0) + simd.reduce_add_ordered(acc)

@@ -3,7 +3,6 @@ package mlp
 import "base:runtime"
 import "core:math/rand"
 import "core:mem"
-import "core:os"
 
 @(export)
 set_seed :: proc "c" (seed: u64) {
@@ -163,83 +162,4 @@ model_get_layer_gradients :: proc "c" (handle: rawptr, layer_idx: u32, dst_w: [^
 	b_grad := m.layers[layer_idx].bias_grad
 	if len(w_grad) > 0 && dst_w != nil do mem.copy(dst_w, raw_data(w_grad), len(w_grad) * size_of(f32))
 	if len(b_grad) > 0 && dst_b != nil do mem.copy(dst_b, raw_data(b_grad), len(b_grad) * size_of(f32))
-}
-
-// -----------------------------------------------------------------------------
-// Hyperparameters
-// -----------------------------------------------------------------------------
-
-@(export)
-model_get_hyperparam :: proc "c" (handle: rawptr, param: u8) -> f32 {
-	context = runtime.default_context()
-	m := (^Model)(handle)
-	switch Model_Hyperparam(param) {
-	case .L1:          return m.l1
-	case .L2:          return m.l2
-	case .Grad_Clip:   return m.grad_clip
-	case .Weight_Clip: return m.weight_clip
-	case:              return 0.0
-	}
-}
-
-@(export)
-model_set_hyperparam :: proc "c" (handle: rawptr, param: u8, val: f32) {
-	context = runtime.default_context()
-	m := (^Model)(handle)
-	switch Model_Hyperparam(param) {
-	case .L1:          m.l1 = val
-	case .L2:          m.l2 = val
-	case .Grad_Clip:   m.grad_clip = val
-	case .Weight_Clip: m.weight_clip = val
-	}
-}
-
-@(export)
-model_get_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8) -> f32 {
-	context = runtime.default_context()
-	m := (^Model)(handle)
-	if int(layer_idx) >= len(m.layers) do return 0.0
-	switch Layer_Param(param) {
-	case .Dropout: return m.layers[layer_idx].dropout_rate
-	case:          return 0.0
-	}
-}
-
-@(export)
-model_set_layer_param :: proc "c" (handle: rawptr, layer_idx: u32, param: u8, val: f32) {
-	context = runtime.default_context()
-	m := (^Model)(handle)
-	if int(layer_idx) >= len(m.layers) do return
-	switch Layer_Param(param) {
-	case .Dropout: m.layers[layer_idx].dropout_rate = val
-	}
-}
-
-// -----------------------------------------------------------------------------
-// Persistence
-// -----------------------------------------------------------------------------
-
-@(export)
-model_save_params :: proc "c" (handle: rawptr, path: cstring) -> bool {
-	context = runtime.default_context()
-	m := (^Model)(handle)
-	f, err := os.open(string(path), flags={.Write, .Create})
-	if err != nil do return false
-	defer os.close(f)
-	save_model(m^, f)
-	return true
-}
-
-@(export)
-model_load_params :: proc "c" (path: cstring) -> rawptr {
-	context = runtime.default_context()
-	f, file_err := os.open(string(path))
-	if file_err != nil do return nil
-	defer os.close(f)
-	model, err := load_model(f)
-	if err != nil do return nil
-
-	handle := new(Model)
-	handle^ = model
-	return handle
 }

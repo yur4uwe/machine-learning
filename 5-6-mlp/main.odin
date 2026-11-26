@@ -61,14 +61,14 @@ main :: proc() {
 		mlp.model_optimizer(model, learning_rate)
 	}
 
-	fmt.printfln("Final loss: %f", loss)
-
-	f, err := os.open("test.mlp1", flags = os.File_Flags{.Create, .Write})
-	if err != nil {
-		fmt.eprintln(err)
-	}
-
-	mlp.save_model(model, f)
+	// fmt.printfln("Final loss: %f", loss)
+	//
+	// f, err := os.open("test.mlp1", flags = os.File_Flags{.Create, .Write})
+	// if err != nil {
+	// 	fmt.eprintln(err)
+	// }
+	//
+	// mlp.save_model(model, f)
 
 	// f, err := os.open("test.mlp1")
 	// if err != nil {
